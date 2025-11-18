@@ -1,0 +1,35 @@
+[
+  {
+    "id": 1,
+    "question": "Total Internet Sales Amount for calendar year 2004",
+    "gold_sql": "SELECT SUM(fis.SalesAmount) AS TotalInternetSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2004;",
+    "model_sql": "",
+    "validated": false,
+    "model_exec_ok": false,
+    "result_match": false,
+    "gold_error": null,
+    "model_error": null
+  },
+  {
+    "id": 2,
+    "question": "Total number of Internet Sales orders in 2004",
+    "gold_sql": "SELECT COUNT(DISTINCT fis.SalesOrderNumber) AS OrderCount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2004;",
+    "model_sql": "",
+    "validated": false,
+    "model_exec_ok": false,
+    "result_match": false,
+    "gold_error": null,
+    "model_error": null
+  },
+  {
+    "id": 3,
+    "question": "Top 10 customers by Internet Sales Amount in 2004",
+    "gold_sql": "SELECT TOP 10 c.CustomerKey, c.FirstName, c.LastName, SUM(fis.SalesAmount) AS TotalSalesAmount FROM FactInternetSales AS fis JOIN DimCustomer AS c ON fis.CustomerKey = c.CustomerKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2004 GROUP BY c.CustomerKey, c.FirstName, c.LastName ORDER BY TotalSalesAmount DESC;",
+    "model_sql": "",
+    "validated": false,
+    "model_exec_ok": false,
+    "result_match": false,
+    "gold_error": null,
+    "model_error": null
+  }
+]

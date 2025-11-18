@@ -1,0 +1,7 @@
+vanna
+python-dotenv
+chromadb
+pyodbc
+sqlalchemy
+fastapi
+uvicorn
