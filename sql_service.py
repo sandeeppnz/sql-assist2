@@ -12,6 +12,7 @@ from schema_service import schema_service
 
 MAX_REPAIR_ATTEMPTS = 3
 
+
 def _validate_sql(sql: str) -> Tuple[bool, Dict[str, Any]]:
     diagnostics: Dict[str, Any] = {}
 
@@ -44,6 +45,7 @@ def _validate_sql(sql: str) -> Tuple[bool, Dict[str, Any]]:
 
     return ok, diagnostics
 
+
 def _build_error_summary(diagnostics: Dict[str, Any]) -> str:
     unknown_tables = diagnostics.get("unknown_tables") or []
     unknown_cols = diagnostics.get("unknown_columns") or []
@@ -63,33 +65,67 @@ def _build_error_summary(diagnostics: Dict[str, Any]) -> str:
 
     return "\n".join(lines) or "No explicit error summary available."
 
+
+def _format_unknown_columns_for_prompt(unknown_cols: List[Dict[str, str]]) -> str:
+    """
+    Pretty-print the unknown columns from diagnostics["unknown_columns"]
+    for use in the repair prompt.
+    Each item is: {"table": t, "alias": a, "column": c}
+    """
+    if not unknown_cols:
+        return "None."
+
+    lines: List[str] = []
+    for item in unknown_cols:
+        table = item.get("table")
+        alias = item.get("alias")
+        col = item.get("column")
+        if alias and alias != table:
+            lines.append(f"- {alias}.{col} (table {table})")
+        else:
+            lines.append(f"- {table}.{col}")
+    return "\n".join(lines)
+
+
 def _repair_sql(question: str, bad_sql: str, diagnostics: Dict[str, Any]) -> str:
+    """
+    Try to repair an invalid SQL query using Vanna/Ollama.
+
+    This version deliberately keeps the prompt simple and close to the
+    original behaviour that gave you ~80% accuracy. It passes along the
+    diagnostics as a short error summary, but does NOT over-constrain
+    unknown_tables / unknown_columns.
+    """
     error_summary = _build_error_summary(diagnostics)
 
     prompt = f"""You generated invalid SQL for a Microsoft SQL Server database.
 
-ORIGINAL QUESTION:
-{question}
+        ORIGINAL QUESTION:
+        {question}
 
-INVALID SQL:
-{bad_sql}
+        INVALID SQL:
+        {bad_sql}
 
-ERROR DIAGNOSTICS:
-{error_summary}
+        ERROR DIAGNOSTICS:
+        {error_summary}
 
-SCHEMA:
-{schema_service.schema_text}
+        SCHEMA:
+        {schema_service.schema_text}
 
-INSTRUCTIONS:
-- Generate ONE corrected T-SQL SELECT statement (CTEs allowed).
-- Use ONLY tables and columns from the SCHEMA.
-- Do NOT use LIMIT, OFFSET, CUBE, GROUPING SETS, or non-T-SQL constructs.
-- Always join to DimDate and filter on CalendarYear or FullDateAlternateKey when filtering by year or date.
-- Do NOT invent tables or columns.
-"""
+        INSTRUCTIONS:
+        - Generate ONE corrected T-SQL SELECT statement (CTEs allowed).
+        - Use ONLY tables and columns from the SCHEMA.
+        - Do NOT use LIMIT, OFFSET, CUBE, GROUPING SETS, or non-T-SQL constructs.
+        - Always join to DimDate and filter on CalendarYear or FullDateAlternateKey when filtering by year or date.
+        - Do NOT invent tables or columns.
+
+        Return ONLY the corrected SQL. No explanations, no comments, no JSON.
+        """
 
     repaired_sql = generate_sql_from_prompt(prompt)
+    # Normalize whitespace a bit
     return " ".join(repaired_sql.split())
+
 
 def generate_full_pipeline(question: str) -> Dict[str, Any]:
     history: List[Dict[str, Any]] = []
@@ -133,9 +169,11 @@ def generate_full_pipeline(question: str) -> Dict[str, Any]:
         "history": history,
     }
 
+
 def generate_raw(question: str) -> Dict[str, Any]:
     sql = generate_sql(question)
     return {"sql": sql}
+
 
 def validate_only(sql: str) -> Dict[str, Any]:
     ok, diag = _validate_sql(sql)

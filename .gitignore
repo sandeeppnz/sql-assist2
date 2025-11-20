@@ -1,0 +1,15 @@
+/venv
+/data
+/models
+/logs
+/results
+/docs
+/tests
+/scripts
+/configs
+/notebooks
+/examples
+/tutorials
+/utils
+/README.md
+chroma.sqlite3
