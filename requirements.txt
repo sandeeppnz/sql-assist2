@@ -1,7 +1,9 @@
-vanna
+ollama
+vanna[chromadb]==0.6.2
 python-dotenv
 chromadb
 pyodbc
 sqlalchemy
 fastapi
 uvicorn
+
