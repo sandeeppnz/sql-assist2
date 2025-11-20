@@ -1,4 +1,3 @@
-/venv
 /data
 /models
 /logs
@@ -12,3 +11,5 @@
 /tutorials
 /utils
 chroma.sqlite3
+/venv
+venv/
