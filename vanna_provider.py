@@ -46,18 +46,6 @@ def _debug_log(tag: str, raw_sql: str):
     print("=" * 80 + "\n")
 
 
-def generate_sql_from_question(question: str) -> str:
-    """
-    NL → SQL generation using Vanna+Ollama.
-    """
-    vn = get_vn()
-    raw = vn.generate_sql(question)   # Vanna decides plan
-
-    _debug_log("FROM QUESTION", raw)
-
-    return _normalize_sql_output(raw)
-
-
 def generate_sql_from_prompt(prompt: str) -> str:
     """
     SQL repair mode (direct prompt → SQL).
@@ -65,6 +53,6 @@ def generate_sql_from_prompt(prompt: str) -> str:
     vn = get_vn()
     raw = vn.generate_sql(prompt)
 
-    _debug_log("FROM REPAIR PROMPT", raw)
+    _debug_log("FROM QUESTION", raw)
 
     return _normalize_sql_output(raw)
