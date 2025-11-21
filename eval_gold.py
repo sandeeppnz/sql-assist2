@@ -6,20 +6,12 @@ from db import run_query
 
 
 def _normalize_sql(sql: Optional[str]) -> str:
-    """
-    Simple SQL normalizer for equality checks:
-    - handle None
-    - strip leading/trailing whitespace
-    - remove trailing semicolon
-    - collapse internal whitespace
-    - lowercase
-    """
+    """Simple SQL normalizer: strip, remove trailing ';', squeeze whitespace."""
     if not sql:
         return ""
     s = sql.strip().rstrip(";")
-    # collapse whitespace
-    parts = s.split()
-    return " ".join(parts).lower()
+    # Collapse all whitespace to single spaces
+    return " ".join(s.split())
 
 
 def eval_gold() -> None:
@@ -42,10 +34,8 @@ def eval_gold() -> None:
         item["repaired"] = None
         item["gold_row_count"] = None
         item["model_row_count"] = None
-
-        # New fields
         item["sql_exact_match"] = False
-        item["model_correct"] = False  # our new accuracy notion
+        item["model_correct"] = False  # relaxed correctness
 
         # --- 1) Generate + validate + (auto-)repair ---
         try:
@@ -57,8 +47,7 @@ def eval_gold() -> None:
             item["repaired"] = result.get("repaired")
         except Exception as ex:
             item["model_error"] = f"generation/validation error: {ex}"
-            # No model_sql => can't execute or compare
-            continue
+            continue  # can't go further without SQL
 
         # --- 2) Execute gold SQL ---
         gold_result = None
@@ -67,7 +56,7 @@ def eval_gold() -> None:
             item["gold_row_count"] = len(gold_result)
             item["gold_error"] = None
         except Exception as ex:
-            # gold is "bad" or at least not executable
+            # gold is considered "bad"; we will exclude this row from accuracy
             item["gold_error"] = str(ex)
 
         # --- 3) Execute model SQL ---
@@ -77,75 +66,103 @@ def eval_gold() -> None:
                 model_result = run_query(item["model_sql"])
                 item["model_row_count"] = len(model_result)
                 item["model_exec_ok"] = True
-            else:
-                model_result = None
         except Exception as ex:
             item["model_exec_ok"] = False
             item["model_error"] = f"execution error: {ex}"
-            # Cannot compare results, but we still may mark gold as bad later.
-            # model_correct will remain False in this case.
-            continue
 
-        # --- 4) Compare results if both ran successfully ---
-        if gold_result is not None and model_result is not None:
+        # --- 4) Compare strict results if both ran and gold had no error ---
+        if (
+            item["gold_error"] is None
+            and gold_result is not None
+            and model_result is not None
+        ):
             item["result_match"] = (gold_result == model_result)
-        else:
-            item["result_match"] = False
 
-        # --- 5) Exact SQL match (normalized) ---
+        # --- 5) Exact SQL text match (normalized) ---
         norm_gold = _normalize_sql(gold_sql)
         norm_model = _normalize_sql(item["model_sql"])
-        item["sql_exact_match"] = bool(norm_model and norm_model == norm_gold)
+        if norm_gold and norm_model and norm_gold == norm_model:
+            item["sql_exact_match"] = True
 
-        # --- 6) Model correctness (independent of gold being right/wrong) ---
-        gold_ok = gold_result is not None and item["gold_error"] is None
-        model_ok = model_result is not None and item["model_exec_ok"]
-
-        # Heuristic:
-        # - Model must be executable and validated
-        # - If gold is good, we require result_match
-        # - If gold fails, but model is valid & executable, we still give credit
-        if model_ok and item["validated"]:
-            if item["result_match"]:
-                # Both gold & model ran and agree on result
-                item["model_correct"] = True
-            elif not gold_ok:
-                # Gold is broken / errored, but model ran fine => give credit
-                item["model_correct"] = True
-            else:
-                item["model_correct"] = False
+        # --- 6) Relaxed "model_correct" (row-count based, only when gold is valid) ---
+        if (
+            item["gold_error"] is None
+            and item["model_exec_ok"]
+            and item["gold_row_count"] is not None
+            and item["model_row_count"] is not None
+        ):
+            # relaxed correctness: same number of rows
+            item["model_correct"] = (item["gold_row_count"] == item["model_row_count"])
         else:
             item["model_correct"] = False
 
-    # --- 7) Save results ---
+    # --- 7) Save per-question results ---
     with open("adventureworks_eval_results.json", "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
-    # --- 8) Aggregate metrics ---
+    # ========== REPORTING SECTION ==========
     total = len(data)
+    gold_error_cases = [x for x in data if x.get("gold_error")]
+    non_gold = [x for x in data if not x.get("gold_error")]
 
-    semantic_ok = sum(1 for x in data if x.get("result_match"))
-    model_correct_ok = sum(1 for x in data if x.get("model_correct"))
-    sql_exact_ok = sum(1 for x in data if x.get("sql_exact_match"))
+    # Primary: strict accuracy based on result_match, excluding gold errors
+    strict_ok = [x for x in non_gold if x.get("result_match")]
+    strict_fail = [x for x in non_gold if not x.get("result_match")]
 
-    def _acc(ok: int) -> float:
-        return ok / total if total else 0.0
+    strict_acc = (len(strict_ok) / len(non_gold)) if non_gold else 0.0
 
-    print(f"Total examples: {total}")
-    print(f"Semantic accuracy (match gold results): {semantic_ok}/{total} = {_acc(semantic_ok):.2%}")
-    print(f"Model-correct accuracy (model valid even if gold fails): {model_correct_ok}/{total} = {_acc(model_correct_ok):.2%}")
-    print(f"Exact SQL match rate: {sql_exact_ok}/{total} = {_acc(sql_exact_ok):.2%}")
+    # Secondary: relaxed accuracy (row-count based), excluding gold errors
+    relaxed_base = [x for x in non_gold if x.get("model_exec_ok")]
+    relaxed_ok = [x for x in relaxed_base if x.get("model_correct")]
+    relaxed_acc = (len(relaxed_ok) / len(relaxed_base)) if relaxed_base else 0.0
 
-    # --- 9) Failure breakdowns ---
-    print("\nSemantic failures (result_match = False):")
-    for item in data:
-        if not item.get("result_match"):
+    print("=== SUMMARY ===")
+    print(f"Total questions: {total}")
+    print(f"Gold SQL error cases: {len(gold_error_cases)}")
+    print(f"Evaluated (no gold error): {len(non_gold)}")
+    print()
+
+    print("Strict accuracy (result_match, excluding gold errors):")
+    print(f"  {len(strict_ok)}/{len(non_gold)} = {strict_acc:.2%}")
+    print()
+
+    print("Relaxed accuracy (row-count match, excluding gold errors):")
+    if relaxed_base:
+        print(f"  {len(relaxed_ok)}/{len(relaxed_base)} = {relaxed_acc:.2%}")
+    else:
+        print("  (no cases where model_exec_ok and gold was valid)")
+    print()
+
+    # --- Gold SQL issues (for manual cleanup of the benchmark) ---
+    print("=== Gold SQL errors (excluded from accuracy) ===")
+    if not gold_error_cases:
+        print("  None ✅")
+    else:
+        for item in gold_error_cases:
+            err_first_line = (item["gold_error"] or "").splitlines()[0][:140]
             print(f"- id={item['id']}: {item['question']}")
+            print(f"    gold_error: {err_first_line}")
+    print()
 
-    print("\nModel-correct failures (model_correct = False):")
-    for item in data:
-        if not item.get("model_correct"):
-            print(f"- id={item['id']}: {item['question']} (gold_error={item.get('gold_error')}, model_error={item.get('model_error')})")
+    # --- Strict failures: where model didn't match gold (no gold error) ---
+    print("=== Strict failures (no gold error, result_match = False) ===")
+    if not strict_fail:
+        print("  None 🎉")
+    else:
+        for item in strict_fail:
+            relax_label = "RELAXED_OK" if item.get("model_correct") else "RELAXED_FAIL"
+            print(f"- id={item['id']} [{relax_label}] {item['question']}")
+            print(
+                f"    rows: gold={item.get('gold_row_count')} "
+                f"model={item.get('model_row_count')} "
+                f"model_exec_ok={item.get('model_exec_ok')}"
+            )
+            # short indicator if SQL text matches exactly (nice sanity check)
+            if item.get("sql_exact_match"):
+                print("    sql_exact_match: True")
+            else:
+                print("    sql_exact_match: False")
+    print()
 
 
 if __name__ == "__main__":
