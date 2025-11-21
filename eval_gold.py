@@ -116,6 +116,15 @@ def eval_gold() -> None:
     relaxed_ok = [x for x in relaxed_base if x.get("model_correct")]
     relaxed_acc = (len(relaxed_ok) / len(relaxed_base)) if relaxed_base else 0.0
 
+    # Gold queries that ran but returned zero rows
+    gold_zero_rows = [
+        x
+        for x in data
+        if x.get("gold_error") is None
+        and x.get("gold_row_count") is not None
+        and x.get("gold_row_count") == 0
+    ]
+
     print("=== SUMMARY ===")
     print(f"Total questions: {total}")
     print(f"Gold SQL error cases: {len(gold_error_cases)}")
@@ -142,6 +151,20 @@ def eval_gold() -> None:
             err_first_line = (item["gold_error"] or "").splitlines()[0][:140]
             print(f"- id={item['id']}: {item['question']}")
             print(f"    gold_error: {err_first_line}")
+    print()
+
+    # --- Gold zero-row results (for potential question / gold SQL review) ---
+    print("=== Gold zero-row results (gold_row_count == 0, no gold_error) ===")
+    if not gold_zero_rows:
+        print("  None")
+    else:
+        for item in gold_zero_rows:
+            print(f"- id={item['id']}: {item['question']}")
+            print(
+                f"    gold_row_count={item.get('gold_row_count')}, "
+                f"model_row_count={item.get('model_row_count')}, "
+                f"result_match={item.get('result_match')}"
+            )
     print()
 
     # --- Strict failures: where model didn't match gold (no gold error) ---
