@@ -1,4 +1,6 @@
 from typing import Any, Dict, List, Tuple
+import re
+from db import run_query
 
 from sql_generator import generate_sql
 from vanna_provider import generate_sql_from_prompt
@@ -13,6 +15,10 @@ from schema_service import schema_service
 
 MAX_REPAIR_ATTEMPTS = 3
 
+DIVIDE_BY_ZERO_PAT = re.compile(
+    r"/\s*(COUNT|SUM)\s*\(",
+    flags=re.IGNORECASE
+)
 
 def _validate_sql(sql: str) -> Tuple[bool, Dict[str, Any]]:
     diagnostics: Dict[str, Any] = {}
@@ -99,17 +105,77 @@ def _format_unknown_columns_for_prompt(unknown_cols: List[Dict[str, str]]) -> st
             lines.append(f"- {table}.{col}")
     return "\n".join(lines)
 
+def _add_nullif_to_divisions(sql: str) -> str:
+    """
+    Very conservative: transform patterns like
+       / COUNT(...)
+    or  / SUM(...)
+    into
+       / NULLIF(COUNT(...), 0)
+    if they aren't already using NULLIF.
+    """
+
+    def repl(match: re.Match) -> str:
+        func = match.group(1)  # COUNT or SUM
+        # We will grab from this point up to the matching ')'
+        # and wrap it in NULLIF(..., 0)
+        start = match.start(1)  # position of function name
+        # Very simple parenthesis matching forward:
+        depth = 0
+        i = start
+        while i < len(sql):
+            if sql[i] == '(':
+                depth += 1
+            elif sql[i] == ')':
+                depth -= 1
+                if depth == 0:
+                    break
+            i += 1
+        func_call = sql[start:i+1]  # e.g. COUNT(DISTINCT ...)
+        # If already has NULLIF inside, skip
+        if "NULLIF" in func_call.upper():
+            return match.group(0)
+        return f"/ NULLIF({func_call}, 0)"
+
+    # Apply once – could be extended to global replacements if safe
+    new_sql = sql
+    for m in DIVIDE_BY_ZERO_PAT.finditer(sql):
+        new_sql = _apply_one_replacement(new_sql, m)
+        break  # only first for now
+    return new_sql
+
+def _apply_one_replacement(sql: str, match: re.Match) -> str:
+    func = match.group(1)
+    start = match.start(1)
+    depth = 0
+    i = start
+    while i < len(sql):
+        if sql[i] == '(':
+            depth += 1
+        elif sql[i] == ')':
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    func_call = sql[start:i+1]
+    if "NULLIF" in func_call.upper():
+        return sql
+    replacement = f"/ NULLIF({func_call}, 0)"
+    return sql[:match.start()] + replacement + sql[i+1:]
+
 
 def _repair_sql(question: str, bad_sql: str, diagnostics: Dict[str, Any]) -> str:
     """
     Try to repair an invalid SQL query using Vanna/Ollama.
 
     - Keeps prompts simple and close to what worked well.
-    - Uses question-based hints for specific tricky cases (17, 21, 24, 25, 26, 29).
+    - Uses question-based hints for specific tricky cases (17, 21, 24, 25, 26, 28, 29).
     - Adds unknown-table-based hints without over-constraining the model.
+    - Adds a generic hint for misuse of OrderDateKey with date literals.
     """
     error_summary = _build_error_summary(diagnostics)
     q = (question or "").lower()
+    sql_lower = (bad_sql or "").lower()
 
     extra_instructions: List[str] = []
 
@@ -178,9 +244,11 @@ def _repair_sql(question: str, bad_sql: str, diagnostics: Dict[str, Any]) -> str
         extra_instructions.append(
             "- Use two CTEs:\n"
             "  * Sales2003: DISTINCT CustomerKey from FactInternetSales joined to DimDate "
-            "    where CalendarYear = 2003.\n"
+            "    ON FactInternetSales.OrderDateKey = DimDate.DateKey where DimDate.CalendarYear = 2003.\n"
             "  * Sales2004: DISTINCT CustomerKey from FactInternetSales joined to DimDate "
-            "    where CalendarYear = 2004.\n"
+            "    ON FactInternetSales.OrderDateKey = DimDate.DateKey where DimDate.CalendarYear = 2004.\n"
+            "  DO NOT compare OrderDateKey directly to string dates like '2003-01-01'; "
+            "  always go through DimDate.\n"
             "  Then LEFT JOIN Sales2003 to Sales2004 on CustomerKey, filter rows where "
             "  Sales2004.CustomerKey IS NULL, and join DimCustomer to return customer details."
         )
@@ -196,6 +264,16 @@ def _repair_sql(question: str, bad_sql: str, diagnostics: Dict[str, Any]) -> str
             "  c.CustomerKey, c.FirstName, c.LastName, c.EmailAddress."
         )
 
+    # ---- Generic hint for misuse of OrderDateKey with date literals ----
+    # Pattern seen in id=29: OrderDateKey BETWEEN '2003-01-01' AND '2003-12-31'
+    if "orderdatekey" in sql_lower and "'" in bad_sql:
+        extra_instructions.append(
+            "- OrderDateKey is an integer surrogate key, not a date.\n"
+            "  Do NOT compare OrderDateKey directly to string dates such as '2003-01-01'.\n"
+            "  Instead, join your fact table to DimDate ON OrderDateKey = DateKey and\n"
+            "  filter using DimDate.CalendarYear or DimDate.FullDateAlternateKey."
+        )
+
     # ---- Unknown-table-based hints (from diagnostics) ----
 
     unknown_tables = diagnostics.get("unknown_tables") or []
@@ -204,7 +282,7 @@ def _repair_sql(question: str, bad_sql: str, diagnostics: Dict[str, Any]) -> str
     extra_text_parts: List[str] = []
     if extra_instructions:
         extra_text_parts.append(
-            "ADDITIONAL TASK-SPECIFIC HINTS:\n" + "\n\n".join(extra_instructions)
+            "ADDITIONAL TASK-SPECIFIC / GENERIC HINTS:\n" + "\n\n".join(extra_instructions)
         )
     if unknown_table_hints:
         extra_text_parts.append(
@@ -235,6 +313,7 @@ INSTRUCTIONS:
 - Do NOT use LIMIT, OFFSET, CUBE, GROUPING SETS, or non-T-SQL constructs.
 - Always join to DimDate and filter on CalendarYear or FullDateAlternateKey when filtering by year or date.
 - Do NOT invent tables or columns.
+- Do NOT compare integer surrogate keys like OrderDateKey directly to string date literals.
 
 Return ONLY the corrected SQL. No explanations, no comments, no JSON.
 """
@@ -243,6 +322,8 @@ Return ONLY the corrected SQL. No explanations, no comments, no JSON.
     # Normalize whitespace
     return " ".join(repaired_sql.split())
 
+
+
 def generate_full_pipeline(question: str) -> Dict[str, Any]:
     """
     End-to-end pipeline:
@@ -250,28 +331,115 @@ def generate_full_pipeline(question: str) -> Dict[str, Any]:
     1) Use generate_sql(question) for the first attempt.
     2) Validate with _validate_sql (safety + unknown tables/cols + bad YEAR() + preflight).
     3) If invalid, call _repair_sql(...) and re-validate, up to MAX_REPAIR_ATTEMPTS.
-    4) Return the final SQL, diagnostics, and attempt history.
+    4) Once we have a validated SQL, try executing it.
+       - If execution fails with divide-by-zero, apply _add_nullif_to_divisions(...)
+         once and retry execution.
+    5) Return the final SQL, diagnostics, attempt history, and any execution error.
 
     Note: On total failure we still return the *last* attempted SQL string
     instead of None, so callers can inspect what the model produced.
     """
     history: List[Dict[str, Any]] = []
 
+    def _try_execute_with_divzero_repair(
+        sql: str,
+        validated: bool,
+        diag: Dict[str, Any],
+        attempts: int,
+        repaired: bool,
+    ) -> Dict[str, Any]:
+        """
+        Try to run the SQL. If we hit a divide-by-zero error, we attempt
+        one automatic repair by wrapping denominators with NULLIF.
+        """
+        try:
+            _ = run_query(sql)
+            return {
+                "sql": sql,
+                "validated": validated,
+                "repaired": repaired,
+                "attempts": attempts,
+                "diagnostics": diag,
+                "history": history,
+                "exec_error": None,
+            }
+        except Exception as ex:
+            msg = str(ex)
+
+            # Heuristic repair for divide-by-zero
+            if "divide by zero" in msg.lower():
+                repaired_sql = _add_nullif_to_divisions(sql)
+                attempts += 1
+                repaired = True
+
+                # Optionally re-validate the repaired SQL
+                ok2, diag2 = _validate_sql(repaired_sql)
+                history.append({
+                    "sql": repaired_sql,
+                    "diagnostics": diag2,
+                    "note": "auto NULLIF / divide-by-zero repair",
+                })
+
+                if ok2:
+                    try:
+                        _ = run_query(repaired_sql)
+                        return {
+                            "sql": repaired_sql,
+                            "validated": True,
+                            "repaired": repaired,
+                            "attempts": attempts,
+                            "diagnostics": diag2,
+                            "history": history,
+                            "exec_error": None,
+                        }
+                    except Exception as ex2:
+                        # Repaired SQL still fails at execution
+                        return {
+                            "sql": repaired_sql,
+                            "validated": True,
+                            "repaired": repaired,
+                            "attempts": attempts,
+                            "diagnostics": diag2,
+                            "history": history,
+                            "exec_error": str(ex2),
+                        }
+                else:
+                    # Our NULLIF patch made it fail validation – return that state
+                    return {
+                        "sql": repaired_sql,
+                        "validated": False,
+                        "repaired": repaired,
+                        "attempts": attempts,
+                        "diagnostics": diag2,
+                        "history": history,
+                        "exec_error": msg,
+                    }
+
+            # Non-divide-by-zero error, just bubble it up
+            return {
+                "sql": sql,
+                "validated": validated,
+                "repaired": repaired,
+                "attempts": attempts,
+                "diagnostics": diag,
+                "history": history,
+                "exec_error": msg,
+            }
+
     # 1) First-pass SQL from the model
     sql = generate_sql(question)
     ok, diag = _validate_sql(sql)
     history.append({"sql": sql, "diagnostics": diag})
 
-    # 2) If it's valid + safe, we're done
+    # 2) If it's valid + safe, try executing (with div/0 repair if needed)
     if ok:
-        return {
-            "sql": sql,
-            "validated": True,
-            "repaired": False,
-            "attempts": 1,
-            "diagnostics": diag,
-            "history": history,
-        }
+        return _try_execute_with_divzero_repair(
+            sql=sql,
+            validated=True,
+            diag=diag,
+            attempts=1,
+            repaired=False,
+        )
 
     # 3) Try to repair a few times using _repair_sql
     attempts = 1
@@ -284,24 +452,26 @@ def generate_full_pipeline(question: str) -> Dict[str, Any]:
         history.append({"sql": sql, "diagnostics": diag})
 
         if ok:
-            return {
-                "sql": sql,
-                "validated": True,
-                "repaired": True,
-                "attempts": attempts,
-                "diagnostics": diag,
-                "history": history,
-            }
+            # validated successfully after repair -> execute with div/0 patch if needed
+            return _try_execute_with_divzero_repair(
+                sql=sql,
+                validated=True,
+                diag=diag,
+                attempts=attempts,
+                repaired=True,
+            )
 
     # 4) All repair attempts failed; return the last SQL we tried
     return {
-        "sql": sql,              # <— last attempted SQL, not None
+        "sql": sql,              # last attempted SQL
         "validated": False,
         "repaired": True,
         "attempts": attempts,
         "diagnostics": diag,
         "history": history,
+        "exec_error": "validation failed after repair attempts",
     }
+
 
 
 def generate_raw(question: str) -> Dict[str, Any]:
