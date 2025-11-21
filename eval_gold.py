@@ -1,6 +1,7 @@
 import json
 from typing import Any, Dict, List, Optional
 
+from config import GOLD_TEST_FILE
 from sql_service import generate_full_pipeline
 from db import run_query
 
@@ -15,7 +16,7 @@ def _normalize_sql(sql: Optional[str]) -> str:
 
 
 def eval_gold() -> None:
-    with open("gold_eval.json", "r", encoding="utf-8") as f:
+    with open(GOLD_TEST_FILE, "r", encoding="utf-8") as f:
         data: List[Dict[str, Any]] = json.load(f)
 
     for item in data:
