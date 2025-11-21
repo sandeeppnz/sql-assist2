@@ -1,0 +1,168 @@
+[
+    {
+      "id": 31,
+      "question": "Top 20 products by total Internet Sales Amount between 2010 and 2014",
+      "gold_sql": "SELECT TOP 20\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount) AS TotalInternetSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY TotalInternetSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 32,
+      "question": "Internet Sales quantity and amount by Product Category between 2010 and 2014",
+      "gold_sql": "SELECT\n    pc.EnglishProductCategoryName,\n    SUM(fis.OrderQuantity) AS TotalOrderQuantity,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\nJOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY pc.EnglishProductCategoryName\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 33,
+      "question": "Internet Sales Amount by Product Category and Subcategory between 2010 and 2014",
+      "gold_sql": "SELECT\n    pc.EnglishProductCategoryName,\n    psc.EnglishProductSubcategoryName,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\nJOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY pc.EnglishProductCategoryName, psc.EnglishProductSubcategoryName\nORDER BY pc.EnglishProductCategoryName, TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 34,
+      "question": "Internet Sales Amount by product and calendar year between 2010 and 2014",
+      "gold_sql": "SELECT\n    d.CalendarYear,\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY d.CalendarYear, p.ProductKey, p.EnglishProductName\nORDER BY d.CalendarYear, TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 35,
+      "question": "Average Internet selling price per product between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount) / NULLIF(SUM(fis.OrderQuantity), 0) AS AvgSellingPrice\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY AvgSellingPrice DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 36,
+      "question": "Internet gross margin and gross margin percentage by product between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount - fis.TotalProductCost) AS TotalGrossMargin,\n    CASE WHEN SUM(fis.SalesAmount) = 0 THEN NULL\n         ELSE SUM(fis.SalesAmount - fis.TotalProductCost) / SUM(fis.SalesAmount)\n    END AS GrossMarginPct\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY TotalGrossMargin DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 37,
+      "question": "Reseller Sales Amount by Product Category between 2010 and 2013",
+      "gold_sql": "SELECT\n    pc.EnglishProductCategoryName,\n    SUM(frs.SalesAmount) AS TotalSalesAmount\nFROM FactResellerSales AS frs\nJOIN DimProduct AS p ON frs.ProductKey = p.ProductKey\nJOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\nJOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\nJOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2013\nGROUP BY pc.EnglishProductCategoryName\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 38,
+      "question": "Compare Internet and Reseller Sales Amount by Product Category between 2010 and 2013",
+      "gold_sql": "WITH InternetSales AS (\n    SELECT\n        pc.EnglishProductCategoryName,\n        SUM(fis.SalesAmount) AS InternetSalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\n    JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\n    JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY pc.EnglishProductCategoryName\n), ResellerSales AS (\n    SELECT\n        pc.EnglishProductCategoryName,\n        SUM(frs.SalesAmount) AS ResellerSalesAmount\n    FROM FactResellerSales AS frs\n    JOIN DimProduct AS p ON frs.ProductKey = p.ProductKey\n    JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\n    JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY pc.EnglishProductCategoryName\n)\nSELECT\n    COALESCE(i.EnglishProductCategoryName, r.EnglishProductCategoryName) AS EnglishProductCategoryName,\n    i.InternetSalesAmount,\n    r.ResellerSalesAmount\nFROM InternetSales AS i\nFULL OUTER JOIN ResellerSales AS r\n    ON i.EnglishProductCategoryName = r.EnglishProductCategoryName\nORDER BY EnglishProductCategoryName;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 39,
+      "question": "Average inventory UnitsBalance by product and Product Category between 2010 and 2014",
+      "gold_sql": "SELECT\n    pc.EnglishProductCategoryName,\n    psc.EnglishProductSubcategoryName,\n    p.ProductKey,\n    p.EnglishProductName,\n    AVG(CAST(fpi.UnitsBalance AS float)) AS AvgUnitsBalance\nFROM FactProductInventory AS fpi\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nJOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\nJOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY pc.EnglishProductCategoryName, psc.EnglishProductSubcategoryName, p.ProductKey, p.EnglishProductName\nORDER BY pc.EnglishProductCategoryName, psc.EnglishProductSubcategoryName, AvgUnitsBalance DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 40,
+      "question": "Internet Sales Amount by Product Line between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductLine,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductLine\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 41,
+      "question": "Internet Sales Amount by product Color between 2010 and 2014",
+      "gold_sql": "SELECT\n    COALESCE(p.Color, 'Unknown') AS Color,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY COALESCE(p.Color, 'Unknown')\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 42,
+      "question": "Internet Sales Amount by product Class and Style between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.Class,\n    p.Style,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.Class, p.Style\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 43,
+      "question": "Top 10 products by number of distinct Internet customers between 2010 and 2014",
+      "gold_sql": "SELECT TOP 10\n    p.ProductKey,\n    p.EnglishProductName,\n    COUNT(DISTINCT fis.CustomerKey) AS DistinctCustomerCount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY DistinctCustomerCount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 44,
+      "question": "Top 10 products by number of distinct resellers between 2010 and 2013",
+      "gold_sql": "SELECT TOP 10\n    p.ProductKey,\n    p.EnglishProductName,\n    COUNT(DISTINCT frs.ResellerKey) AS DistinctResellerCount\nFROM FactResellerSales AS frs\nJOIN DimProduct AS p ON frs.ProductKey = p.ProductKey\nJOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2013\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY DistinctResellerCount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 45,
+      "question": "Internet product penetration: share of products with at least one Internet Sale between 2010 and 2014",
+      "gold_sql": "WITH ProductsSoldInternet AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n)\nSELECT\n    COUNT(*) AS TotalProducts,\n    COUNT(psi.ProductKey) AS ProductsWithInternetSales,\n    CAST(COUNT(psi.ProductKey) AS float) / NULLIF(COUNT(*), 0) AS InternetProductPenetration\nFROM DimProduct AS p\nLEFT JOIN ProductsSoldInternet AS psi\n    ON p.ProductKey = psi.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  
