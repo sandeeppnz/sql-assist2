@@ -85,26 +85,6 @@ def _build_error_summary(diagnostics: Dict[str, Any]) -> str:
     return "\n".join(lines) or "No explicit error summary available."
 
 
-def _format_unknown_columns_for_prompt(unknown_cols: List[Dict[str, str]]) -> str:
-    """
-    Pretty-print the unknown columns from diagnostics["unknown_columns"]
-    for use in the repair prompt.
-    Each item is: {"table": t, "alias": a, "column": c}
-    """
-    if not unknown_cols:
-        return "None."
-
-    lines: List[str] = []
-    for item in unknown_cols:
-        table = item.get("table")
-        alias = item.get("alias")
-        col = item.get("column")
-        if alias and alias != table:
-            lines.append(f"- {alias}.{col} (table {table})")
-        else:
-            lines.append(f"- {table}.{col}")
-    return "\n".join(lines)
-
 def _add_nullif_to_divisions(sql: str) -> str:
     """
     Very conservative: transform patterns like
