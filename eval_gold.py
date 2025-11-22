@@ -101,8 +101,6 @@ def eval_gold() -> None:
 
         # --- 7) Calibrated confidence scoring (new) ---
         try:
-            from calibration import calibrated_confidence
-
             score = calibrated_confidence(
                 model_sql=item["model_sql"],
                 diagnostics=item["diagnostics"] or {},
