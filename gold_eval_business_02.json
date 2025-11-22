@@ -1,0 +1,223 @@
+[
+    {
+      "id": 1,
+      "question": "You are a global Internet sales manager reviewing performance in 2012. You want to know which Sales Territory Regions are driving the most revenue. Return Internet Sales Amount by Sales Territory Region for calendar year 2012, sorted from highest to lowest.",
+      "gold_sql": "SELECT st.SalesTerritoryRegion, SUM(fis.SalesAmount) AS TotalSalesAmount FROM FactInternetSales AS fis JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryRegion ORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 2,
+      "question": "As a product category owner, you want to understand which Product Categories grew the most between 2011 and 2012 in Internet Sales. For each Product Category, return the Internet Sales Amount in 2011 and 2012 and the absolute change (2012 - 2011).",
+      "gold_sql": "WITH SalesByYear AS ( SELECT pc.EnglishProductCategoryName, d.CalendarYear, SUM(fis.SalesAmount) AS TotalSalesAmount FROM FactInternetSales AS fis JOIN DimProduct AS p ON fis.ProductKey = p.ProductKey JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear IN (2011, 2012) GROUP BY pc.EnglishProductCategoryName, d.CalendarYear ) SELECT s2012.EnglishProductCategoryName, s2011.TotalSalesAmount AS Sales2011, s2012.TotalSalesAmount AS Sales2012, s2012.TotalSalesAmount - s2011.TotalSalesAmount AS SalesChange FROM SalesByYear AS s2011 JOIN SalesByYear AS s2012 ON s2011.EnglishProductCategoryName = s2012.EnglishProductCategoryName AND s2011.CalendarYear = 2011 AND s2012.CalendarYear = 2012 ORDER BY SalesChange DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 3,
+      "question": "A marketing manager wants to know which promotions in 2012 led to the highest average order value for Internet Sales. For each promotion used in 2012, calculate the average Sales Amount per distinct order that used that promotion.",
+      "gold_sql": "WITH OrderSales AS ( SELECT fis.SalesOrderNumber, pr.EnglishPromotionName, SUM(fis.SalesAmount) AS OrderSalesAmount FROM FactInternetSales AS fis JOIN DimPromotion AS pr ON fis.PromotionKey = pr.PromotionKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 AND fis.PromotionKey IS NOT NULL GROUP BY fis.SalesOrderNumber, pr.EnglishPromotionName ) SELECT EnglishPromotionName, AVG(OrderSalesAmount) AS AvgOrderSalesAmount FROM OrderSales GROUP BY EnglishPromotionName ORDER BY AvgOrderSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 4,
+      "question": "The marketing team wants to compare promotion performance versus non-promotion orders in 2012 for Internet Sales. Return total orders, total Sales Amount, and average order value for orders with promotions and orders without promotions in 2012.",
+      "gold_sql": "WITH OrderAgg AS ( SELECT fis.SalesOrderNumber, CASE WHEN MAX(CASE WHEN fis.PromotionKey IS NOT NULL THEN 1 ELSE 0 END) = 1 THEN 'WithPromotion' ELSE 'WithoutPromotion' END AS PromotionFlag, SUM(fis.SalesAmount) AS OrderSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.SalesOrderNumber ) SELECT PromotionFlag, COUNT(*) AS OrderCount, SUM(OrderSalesAmount) AS TotalSalesAmount, AVG(OrderSalesAmount) AS AvgOrderValue FROM OrderAgg GROUP BY PromotionFlag;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 5,
+      "question": "As a pricing analyst, you want to see which Product Categories rely most on discounting in 2012 Internet Sales. For each Product Category, return total DiscountAmount and total SalesAmount for 2012, and compute the ratio DiscountAmount / SalesAmount.",
+      "gold_sql": "SELECT pc.EnglishProductCategoryName, SUM(fis.DiscountAmount) AS TotalDiscountAmount, SUM(fis.SalesAmount) AS TotalSalesAmount, CASE WHEN SUM(fis.SalesAmount) = 0 THEN NULL ELSE SUM(fis.DiscountAmount) / SUM(fis.SalesAmount) END AS DiscountToSalesRatio FROM FactInternetSales AS fis JOIN DimProduct AS p ON fis.ProductKey = p.ProductKey JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY pc.EnglishProductCategoryName ORDER BY DiscountToSalesRatio DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 6,
+      "question": "The finance team wants to understand shipping efficiency in 2012 Internet Sales. For each Sales Territory Region, calculate total Freight, total SalesAmount, and Freight as a percentage of SalesAmount.",
+      "gold_sql": "SELECT st.SalesTerritoryRegion, SUM(fis.Freight) AS TotalFreight, SUM(fis.SalesAmount) AS TotalSalesAmount, CASE WHEN SUM(fis.SalesAmount) = 0 THEN NULL ELSE SUM(fis.Freight) / SUM(fis.SalesAmount) END AS FreightToSalesRatio FROM FactInternetSales AS fis JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryRegion ORDER BY FreightToSalesRatio DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 7,
+      "question": "A customer success manager wants to identify high-value repeat Internet customers in 2012. Find customers who placed at least 3 distinct orders in 2012 and whose total Internet Sales Amount in 2012 exceeds 2,000.",
+      "gold_sql": "WITH CustomerOrders AS ( SELECT fis.CustomerKey, COUNT(DISTINCT fis.SalesOrderNumber) AS OrderCount, SUM(fis.SalesAmount) AS TotalSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.CustomerKey ) SELECT c.CustomerKey, c.FirstName, c.LastName, c.EmailAddress, co.OrderCount, co.TotalSalesAmount FROM CustomerOrders AS co JOIN DimCustomer AS c ON co.CustomerKey = c.CustomerKey WHERE co.OrderCount >= 3 AND co.TotalSalesAmount > 2000 ORDER BY co.TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 8,
+      "question": "The sales planning team wants to know on which weekdays customers tend to place higher-value Internet orders in 2012. For each day of week, return the number of orders and average order value for 2012 Internet Sales.",
+      "gold_sql": "WITH OrderAgg AS ( SELECT fis.SalesOrderNumber, d.EnglishDayNameOfWeek, SUM(fis.SalesAmount) AS OrderSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.SalesOrderNumber, d.EnglishDayNameOfWeek ) SELECT EnglishDayNameOfWeek, COUNT(*) AS OrderCount, AVG(OrderSalesAmount) AS AvgOrderValue FROM OrderAgg GROUP BY EnglishDayNameOfWeek ORDER BY OrderCount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 9,
+      "question": "A regional manager wants to compare Internet versus Reseller performance in 2012 by Sales Territory Country. For each Sales Territory Country, return Internet SalesAmount, Reseller SalesAmount, and Internet share (Internet / (Internet + Reseller)).",
+      "gold_sql": "WITH InternetSales AS ( SELECT st.SalesTerritoryCountry, SUM(fis.SalesAmount) AS InternetSalesAmount FROM FactInternetSales AS fis JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryCountry ), ResellerSales AS ( SELECT st.SalesTerritoryCountry, SUM(frs.SalesAmount) AS ResellerSalesAmount FROM FactResellerSales AS frs JOIN DimSalesTerritory AS st ON frs.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryCountry ) SELECT COALESCE(i.SalesTerritoryCountry, r.SalesTerritoryCountry) AS SalesTerritoryCountry, i.InternetSalesAmount, r.ResellerSalesAmount, CASE WHEN COALESCE(i.InternetSalesAmount, 0) + COALESCE(r.ResellerSalesAmount, 0) = 0 THEN NULL ELSE COALESCE(i.InternetSalesAmount, 0) * 1.0 / (COALESCE(i.InternetSalesAmount, 0) + COALESCE(r.ResellerSalesAmount, 0)) END AS InternetShare FROM InternetSales AS i FULL OUTER JOIN ResellerSales AS r ON i.SalesTerritoryCountry = r.SalesTerritoryCountry ORDER BY InternetShare DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 10,
+      "question": "You are analyzing reseller performance in 2012 and want to find underperforming territories relative to their Sales Quota. For each Sales Territory Region, return total Reseller SalesAmount, total SalesQuota, and attainment (SalesAmount / SalesQuota) for 2012.",
+      "gold_sql": "WITH ResellerSales AS ( SELECT st.SalesTerritoryKey, SUM(frs.SalesAmount) AS TotalSalesAmount FROM FactResellerSales AS frs JOIN DimSalesTerritory AS st ON frs.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryKey ), SalesQuota AS ( SELECT st.SalesTerritoryKey, SUM(fsq.SalesAmountQuota) AS TotalSalesQuota FROM FactSalesQuota AS fsq JOIN DimEmployee AS e ON fsq.EmployeeKey = e.EmployeeKey JOIN DimSalesTerritory AS st ON e.SalesTerritoryKey = st.SalesTerritoryKey JOIN DimDate AS d ON fsq.DateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY st.SalesTerritoryKey ) SELECT st.SalesTerritoryRegion, rs.TotalSalesAmount, sq.TotalSalesQuota, CASE WHEN sq.TotalSalesQuota = 0 THEN NULL ELSE rs.TotalSalesAmount / sq.TotalSalesQuota END AS Attainment FROM ResellerSales AS rs JOIN SalesQuota AS sq ON rs.SalesTerritoryKey = sq.SalesTerritoryKey JOIN DimSalesTerritory AS st ON rs.SalesTerritoryKey = st.SalesTerritoryKey ORDER BY Attainment ASC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 11,
+      "question": "An inventory planner wants to find products that sell well on the Internet but carry high average inventory levels between 2010 and 2014. For each product, return total Internet SalesAmount and average inventory UnitsBalance, and filter to products with SalesAmount > 50,000 and Avg UnitsBalance > 100.",
+      "gold_sql": "WITH InternetSales AS ( SELECT fis.ProductKey, SUM(fis.SalesAmount) AS TotalInternetSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear BETWEEN 2010 AND 2014 GROUP BY fis.ProductKey ), InventoryAvg AS ( SELECT fpi.ProductKey, AVG(CAST(fpi.UnitsBalance AS float)) AS AvgUnitsBalance FROM FactProductInventory AS fpi JOIN DimDate AS d ON fpi.DateKey = d.DateKey WHERE d.CalendarYear BETWEEN 2010 AND 2014 GROUP BY fpi.ProductKey ) SELECT p.ProductKey, p.EnglishProductName, s.TotalInternetSalesAmount, i.AvgUnitsBalance FROM InternetSales AS s JOIN InventoryAvg AS i ON s.ProductKey = i.ProductKey JOIN DimProduct AS p ON s.ProductKey = p.ProductKey WHERE s.TotalInternetSalesAmount > 50000 AND i.AvgUnitsBalance > 100 ORDER BY s.TotalInternetSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 12,
+      "question": "A campaign analyst is interested in how different customer income bands respond to Internet promotions in 2012. For each 25k income band, return the number of distinct customers who placed at least one promotion-based Internet order in 2012.",
+      "gold_sql": "WITH PromoOrders AS ( SELECT DISTINCT fis.SalesOrderNumber FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 AND fis.PromotionKey IS NOT NULL ), PromoCustomers AS ( SELECT DISTINCT fis.CustomerKey FROM FactInternetSales AS fis JOIN PromoOrders AS po ON fis.SalesOrderNumber = po.SalesOrderNumber JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 ) SELECT (c.YearlyIncome/25000)*25000 AS IncomeBandStart, ((c.YearlyIncome/25000)*25000)+24999 AS IncomeBandEnd, COUNT(DISTINCT pc.CustomerKey) AS CustomerCount FROM PromoCustomers AS pc JOIN DimCustomer AS c ON pc.CustomerKey = c.CustomerKey GROUP BY (c.YearlyIncome/25000)*25000, ((c.YearlyIncome/25000)*25000)+24999 ORDER BY IncomeBandStart;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 13,
+      "question": "As a CX analyst, you want to know which customer education levels generate the highest average Internet order value in 2012. For each customer education level, return the number of distinct orders and the average order value.",
+      "gold_sql": "WITH OrderAgg AS ( SELECT fis.SalesOrderNumber, c.EnglishEducation, SUM(fis.SalesAmount) AS OrderSalesAmount FROM FactInternetSales AS fis JOIN DimCustomer AS c ON fis.CustomerKey = c.CustomerKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.SalesOrderNumber, c.EnglishEducation ) SELECT EnglishEducation, COUNT(*) AS OrderCount, AVG(OrderSalesAmount) AS AvgOrderValue FROM OrderAgg GROUP BY EnglishEducation ORDER BY AvgOrderValue DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 14,
+      "question": "A geography lead wants to see which cities have the highest average Internet profit per order in 2012 (SalesAmount - TotalProductCost). For each city, return the number of Internet orders and average profit per order, and only include cities with at least 20 orders.",
+      "gold_sql": "WITH OrderProfit AS ( SELECT fis.SalesOrderNumber, g.City, SUM(fis.SalesAmount - fis.TotalProductCost) AS OrderProfit FROM FactInternetSales AS fis JOIN DimCustomer AS c ON fis.CustomerKey = c.CustomerKey JOIN DimGeography AS g ON c.GeographyKey = g.GeographyKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.SalesOrderNumber, g.City ) SELECT City, COUNT(*) AS OrderCount, AVG(OrderProfit) AS AvgOrderProfit FROM OrderProfit GROUP BY City HAVING COUNT(*) >= 20 ORDER BY AvgOrderProfit DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 15,
+      "question": "The product team wants to identify Internet products that are frequently bought together in the same order lines in 2012 for cross-sell analysis. Return the top 20 product pairs (Product A, Product B) that co-occur in the same SalesOrderNumber, along with the number of orders where the pair appears.",
+      "gold_sql": "WITH OrderLines AS ( SELECT fis.SalesOrderNumber, fis.ProductKey FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 ), Pairs AS ( SELECT ol1.ProductKey AS ProductKeyA, ol2.ProductKey AS ProductKeyB, ol1.SalesOrderNumber FROM OrderLines AS ol1 JOIN OrderLines AS ol2 ON ol1.SalesOrderNumber = ol2.SalesOrderNumber AND ol1.ProductKey < ol2.ProductKey ) SELECT TOP 20 pa.ProductKeyA, p1.EnglishProductName AS ProductNameA, pa.ProductKeyB, p2.EnglishProductName AS ProductNameB, COUNT(DISTINCT pa.SalesOrderNumber) AS OrderCount FROM Pairs AS pa JOIN DimProduct AS p1 ON pa.ProductKeyA = p1.ProductKey JOIN DimProduct AS p2 ON pa.ProductKeyB = p2.ProductKey GROUP BY pa.ProductKeyA, p1.EnglishProductName, pa.ProductKeyB, p2.EnglishProductName ORDER BY OrderCount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 16,
+      "question": "A revenue analyst wants to understand how Internet Sales in 2012 are distributed across customer age groups, assuming BirthDate exists in DimCustomer. Group customers into age bands of 10 years (e.g., 20–29, 30–39) based on age in 2012 and return total Internet SalesAmount per age band.",
+      "gold_sql": "SELECT (DATEDIFF(YEAR, c.BirthDate, '2012-12-31')/10)*10 AS AgeBandStart, ((DATEDIFF(YEAR, c.BirthDate, '2012-12-31')/10)*10) + 9 AS AgeBandEnd, SUM(fis.SalesAmount) AS TotalSalesAmount FROM FactInternetSales AS fis JOIN DimCustomer AS c ON fis.CustomerKey = c.CustomerKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 AND c.BirthDate IS NOT NULL GROUP BY (DATEDIFF(YEAR, c.BirthDate, '2012-12-31')/10)*10, ((DATEDIFF(YEAR, c.BirthDate, '2012-12-31')/10)*10) + 9 ORDER BY AgeBandStart;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 17,
+      "question": "A merchandising manager wants to find Internet products that are premium priced but low volume between 2010 and 2014. List products whose average selling price (SalesAmount / OrderQuantity) is in the top 10% among all products, but whose total OrderQuantity is in the bottom 25%.",
+      "gold_sql": "WITH ProductStats AS ( SELECT fis.ProductKey, SUM(fis.SalesAmount) AS TotalSalesAmount, SUM(fis.OrderQuantity) AS TotalOrderQuantity, SUM(fis.SalesAmount) / NULLIF(SUM(fis.OrderQuantity), 0) AS AvgSellingPrice FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear BETWEEN 2010 AND 2014 GROUP BY fis.ProductKey ), PricePercentiles AS ( SELECT ps.ProductKey, ps.TotalSalesAmount, ps.TotalOrderQuantity, ps.AvgSellingPrice, NTILE(10) OVER (ORDER BY ps.AvgSellingPrice) AS PriceDecile, NTILE(4) OVER (ORDER BY ps.TotalOrderQuantity) AS VolumeQuartile FROM ProductStats AS ps ) SELECT p.ProductKey, p.EnglishProductName, pp.TotalSalesAmount, pp.TotalOrderQuantity, pp.AvgSellingPrice FROM PricePercentiles AS pp JOIN DimProduct AS p ON pp.ProductKey = p.ProductKey WHERE pp.PriceDecile = 10 AND pp.VolumeQuartile = 1 ORDER BY pp.AvgSellingPrice DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 18,
+      "question": "A retention analyst wants to find Internet customers acquired in 2011 (first-ever Internet purchase in 2011) and check whether they returned to buy again in 2012. For those customers, return their first purchase date, whether they purchased again in 2012, and their total 2011 and 2012 SalesAmount.",
+      "gold_sql": "WITH CustomerFirst AS ( SELECT fis.CustomerKey, MIN(d.FullDateAlternateKey) AS FirstPurchaseDate, MIN(d.CalendarYear) AS FirstPurchaseYear FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey GROUP BY fis.CustomerKey ), Sales2011 AS ( SELECT fis.CustomerKey, SUM(fis.SalesAmount) AS Sales2011 FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2011 GROUP BY fis.CustomerKey ), Sales2012 AS ( SELECT fis.CustomerKey, SUM(fis.SalesAmount) AS Sales2012 FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY fis.CustomerKey ) SELECT c.CustomerKey, dc.FirstName, dc.LastName, dc.EmailAddress, cf.FirstPurchaseDate, CASE WHEN s2012.Sales2012 IS NULL THEN 0 ELSE 1 END AS PurchasedAgainIn2012, COALESCE(s2011.Sales2011, 0) AS SalesAmount2011, COALESCE(s2012.Sales2012, 0) AS SalesAmount2012 FROM CustomerFirst AS cf JOIN DimCustomer AS dc ON cf.CustomerKey = dc.CustomerKey LEFT JOIN Sales2011 AS s2011 ON cf.CustomerKey = s2011.CustomerKey LEFT JOIN Sales2012 AS s2012 ON cf.CustomerKey = s2012.CustomerKey WHERE cf.FirstPurchaseYear = 2011 ORDER BY PurchasedAgainIn2012 DESC, SalesAmount2011 DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 19,
+      "question": "A sales director wants a simple Internet vs Reseller revenue trend by calendar quarter between 2010 and 2013. For each CalendarYear and CalendarQuarter, return Internet SalesAmount, Reseller SalesAmount, and total SalesAmount (Internet + Reseller).",
+      "gold_sql": "WITH InternetSales AS ( SELECT d.CalendarYear, d.CalendarQuarter, SUM(fis.SalesAmount) AS InternetSalesAmount FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear BETWEEN 2010 AND 2013 GROUP BY d.CalendarYear, d.CalendarQuarter ), ResellerSales AS ( SELECT d.CalendarYear, d.CalendarQuarter, SUM(frs.SalesAmount) AS ResellerSalesAmount FROM FactResellerSales AS frs JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey WHERE d.CalendarYear BETWEEN 2010 AND 2013 GROUP BY d.CalendarYear, d.CalendarQuarter ) SELECT COALESCE(i.CalendarYear, r.CalendarYear) AS CalendarYear, COALESCE(i.CalendarQuarter, r.CalendarQuarter) AS CalendarQuarter, COALESCE(i.InternetSalesAmount, 0) AS InternetSalesAmount, COALESCE(r.ResellerSalesAmount, 0) AS ResellerSalesAmount, COALESCE(i.InternetSalesAmount, 0) + COALESCE(r.ResellerSalesAmount, 0) AS TotalSalesAmount FROM InternetSales AS i FULL OUTER JOIN ResellerSales AS r ON i.CalendarYear = r.CalendarYear AND i.CalendarQuarter = r.CalendarQuarter ORDER BY CalendarYear, CalendarQuarter;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 20,
+      "question": "A global operations manager wants a high-level view of Internet Sales currency exposure in 2012. For each currency used in 2012 Internet Sales, return total SalesAmount in that currency and the number of distinct orders using that currency.",
+      "gold_sql": "SELECT cu.CurrencyAlternateKey, cu.CurrencyName, SUM(fis.SalesAmount) AS TotalSalesAmount, COUNT(DISTINCT fis.SalesOrderNumber) AS OrderCount FROM FactInternetSales AS fis JOIN DimCurrency AS cu ON fis.CurrencyKey = cu.CurrencyKey JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey WHERE d.CalendarYear = 2012 GROUP BY cu.CurrencyAlternateKey, cu.CurrencyName ORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  

@@ -1,0 +1,113 @@
+[
+    {
+      "id": 56,
+      "question": "Executive summary: Internet vs Reseller sales KPIs for 2012 (sales amount, order count, average order value by channel)",
+      "gold_sql": "SELECT\n    Source,\n    SUM(SalesAmount) AS TotalSalesAmount,\n    COUNT(DISTINCT SalesOrderNumber) AS OrderCount,\n    SUM(SalesAmount) / NULLIF(COUNT(DISTINCT SalesOrderNumber), 0) AS AvgOrderValue\nFROM (\n    SELECT\n        'Internet' AS Source,\n        fis.SalesAmount,\n        fis.SalesOrderNumber\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n\n    UNION ALL\n\n    SELECT\n        'Reseller' AS Source,\n        frs.SalesAmount,\n        frs.SalesOrderNumber\n    FROM FactResellerSales AS frs\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n) AS x\nGROUP BY Source;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 57,
+      "question": "New vs returning Internet customers in 2012 (customer counts and sales amount)",
+      "gold_sql": "WITH FirstYear AS (\n    SELECT\n        fis.CustomerKey,\n        MIN(d.CalendarYear) AS FirstYear\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    GROUP BY fis.CustomerKey\n), Sales2012 AS (\n    SELECT\n        fis.CustomerKey,\n        SUM(fis.SalesAmount) AS Sales2012\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n    GROUP BY fis.CustomerKey\n)\nSELECT\n    CASE WHEN fy.FirstYear = 2012 THEN 'New' ELSE 'Returning' END AS CustomerType,\n    COUNT(*) AS CustomerCount,\n    SUM(s.Sales2012) AS TotalSalesAmount\nFROM Sales2012 AS s\nJOIN FirstYear AS fy ON s.CustomerKey = fy.CustomerKey\nGROUP BY CASE WHEN fy.FirstYear = 2012 THEN 'New' ELSE 'Returning' END;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 58,
+      "question": "Cross-channel customers: customers with both Internet and Reseller sales in 2012, with sales by channel",
+      "gold_sql": "WITH Internet2012 AS (\n    SELECT\n        fis.CustomerKey,\n        SUM(fis.SalesAmount) AS InternetSalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n    GROUP BY fis.CustomerKey\n), Reseller2012 AS (\n    SELECT\n        frs.CustomerKey,\n        SUM(frs.SalesAmount) AS ResellerSalesAmount\n    FROM FactResellerSales AS frs\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n    GROUP BY frs.CustomerKey\n)\nSELECT\n    c.CustomerKey,\n    c.FirstName,\n    c.LastName,\n    i.InternetSalesAmount,\n    r.ResellerSalesAmount\nFROM Internet2012 AS i\nJOIN Reseller2012 AS r ON i.CustomerKey = r.CustomerKey\nJOIN DimCustomer AS c ON i.CustomerKey = c.CustomerKey\nORDER BY (i.InternetSalesAmount + r.ResellerSalesAmount) DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 59,
+      "question": "Territory performance: combined Internet and Reseller Sales Amount by Sales Territory Region between 2010 and 2013",
+      "gold_sql": "WITH InternetSales AS (\n    SELECT\n        st.SalesTerritoryRegion,\n        SUM(fis.SalesAmount) AS InternetSalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY st.SalesTerritoryRegion\n), ResellerSales AS (\n    SELECT\n        st.SalesTerritoryRegion,\n        SUM(frs.SalesAmount) AS ResellerSalesAmount\n    FROM FactResellerSales AS frs\n    JOIN DimSalesTerritory AS st ON frs.SalesTerritoryKey = st.SalesTerritoryKey\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY st.SalesTerritoryRegion\n)\nSELECT\n    COALESCE(i.SalesTerritoryRegion, r.SalesTerritoryRegion) AS SalesTerritoryRegion,\n    ISNULL(i.InternetSalesAmount, 0) AS InternetSalesAmount,\n    ISNULL(r.ResellerSalesAmount, 0) AS ResellerSalesAmount,\n    ISNULL(i.InternetSalesAmount, 0) + ISNULL(r.ResellerSalesAmount, 0) AS TotalSalesAmount\nFROM InternetSales AS i\nFULL OUTER JOIN ResellerSales AS r\n    ON i.SalesTerritoryRegion = r.SalesTerritoryRegion\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 60,
+      "question": "Monthly Internet vs Reseller Sales Amount in North America in 2012",
+      "gold_sql": "WITH InternetNA AS (\n    SELECT\n        d.MonthNumberOfYear,\n        d.EnglishMonthName,\n        SUM(fis.SalesAmount) AS InternetSalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n      AND st.SalesTerritoryRegion = 'North America'\n    GROUP BY d.MonthNumberOfYear, d.EnglishMonthName\n), ResellerNA AS (\n    SELECT\n        d.MonthNumberOfYear,\n        d.EnglishMonthName,\n        SUM(frs.SalesAmount) AS ResellerSalesAmount\n    FROM FactResellerSales AS frs\n    JOIN DimSalesTerritory AS st ON frs.SalesTerritoryKey = st.SalesTerritoryKey\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n      AND st.SalesTerritoryRegion = 'North America'\n    GROUP BY d.MonthNumberOfYear, d.EnglishMonthName\n)\nSELECT\n    COALESCE(i.MonthNumberOfYear, r.MonthNumberOfYear) AS MonthNumberOfYear,\n    COALESCE(i.EnglishMonthName, r.EnglishMonthName) AS EnglishMonthName,\n    ISNULL(i.InternetSalesAmount, 0) AS InternetSalesAmount,\n    ISNULL(r.ResellerSalesAmount, 0) AS ResellerSalesAmount\nFROM InternetNA AS i\nFULL OUTER JOIN ResellerNA AS r\n    ON i.MonthNumberOfYear = r.MonthNumberOfYear\nORDER BY MonthNumberOfYear;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 61,
+      "question": "Promotion funnel: monthly Internet Sales Amount and order count with and without promotion in 2012",
+      "gold_sql": "SELECT\n    d.MonthNumberOfYear,\n    d.EnglishMonthName,\n    CASE WHEN fis.PromotionKey IS NULL THEN 'No Promotion' ELSE 'With Promotion' END AS PromotionFlag,\n    SUM(fis.SalesAmount) AS TotalSalesAmount,\n    COUNT(DISTINCT fis.SalesOrderNumber) AS OrderCount\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear = 2012\nGROUP BY d.MonthNumberOfYear,\n         d.EnglishMonthName,\n         CASE WHEN fis.PromotionKey IS NULL THEN 'No Promotion' ELSE 'With Promotion' END\nORDER BY d.MonthNumberOfYear, PromotionFlag DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 62,
+      "question": "Top 10 products by combined Internet and Reseller Sales Amount between 2010 and 2013",
+      "gold_sql": "WITH InternetSales AS (\n    SELECT\n        fis.ProductKey,\n        SUM(fis.SalesAmount) AS InternetSalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY fis.ProductKey\n), ResellerSales AS (\n    SELECT\n        frs.ProductKey,\n        SUM(frs.SalesAmount) AS ResellerSalesAmount\n    FROM FactResellerSales AS frs\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n    GROUP BY frs.ProductKey\n)\nSELECT TOP 10\n    p.ProductKey,\n    p.EnglishProductName,\n    ISNULL(i.InternetSalesAmount, 0) AS InternetSalesAmount,\n    ISNULL(r.ResellerSalesAmount, 0) AS ResellerSalesAmount,\n    ISNULL(i.InternetSalesAmount, 0) + ISNULL(r.ResellerSalesAmount, 0) AS TotalSalesAmount\nFROM DimProduct AS p\nLEFT JOIN InternetSales AS i ON p.ProductKey = i.ProductKey\nLEFT JOIN ResellerSales AS r ON p.ProductKey = r.ProductKey\nWHERE ISNULL(i.InternetSalesAmount, 0) + ISNULL(r.ResellerSalesAmount, 0) > 0\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 63,
+      "question": "Inventory pressure: products with high Internet Sales Amount but relatively low average inventory between 2010 and 2014",
+      "gold_sql": "WITH InternetSales AS (\n    SELECT\n        fis.ProductKey,\n        SUM(fis.SalesAmount) AS TotalInternetSales\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey\n), Inventory AS (\n    SELECT\n        fpi.ProductKey,\n        AVG(CAST(fpi.UnitsBalance AS float)) AS AvgUnitsBalance\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fpi.ProductKey\n)\nSELECT TOP 20\n    p.ProductKey,\n    p.EnglishProductName,\n    i.TotalInternetSales,\n    inv.AvgUnitsBalance\nFROM InternetSales AS i\nJOIN Inventory AS inv ON i.ProductKey = inv.ProductKey\nJOIN DimProduct AS p ON i.ProductKey = p.ProductKey\nWHERE i.TotalInternetSales > 0\nORDER BY i.TotalInternetSales DESC, inv.AvgUnitsBalance ASC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 64,
+      "question": "Sales quota attainment by salesperson (employee) in 2012 for Reseller Sales",
+      "gold_sql": "WITH ResellerSales AS (\n    SELECT\n        e.EmployeeKey,\n        SUM(frs.SalesAmount) AS TotalResellerSales\n    FROM FactResellerSales AS frs\n    JOIN DimEmployee AS e ON frs.EmployeeKey = e.EmployeeKey\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n    GROUP BY e.EmployeeKey\n), SalesQuota AS (\n    SELECT\n        e.EmployeeKey,\n        SUM(fsq.SalesAmountQuota) AS TotalSalesQuota\n    FROM FactSalesQuota AS fsq\n    JOIN DimEmployee AS e ON fsq.EmployeeKey = e.EmployeeKey\n    JOIN DimDate AS d ON fsq.DateKey = d.DateKey\n    WHERE d.CalendarYear = 2012\n    GROUP BY e.EmployeeKey\n)\nSELECT\n    e.EmployeeKey,\n    e.FirstName,\n    e.LastName,\n    rs.TotalResellerSales,\n    sq.TotalSalesQuota,\n    CASE WHEN sq.TotalSalesQuota = 0 THEN NULL ELSE rs.TotalResellerSales / sq.TotalSalesQuota END AS QuotaAttainment\nFROM ResellerSales AS rs\nJOIN SalesQuota AS sq ON rs.EmployeeKey = sq.EmployeeKey\nJOIN DimEmployee AS e ON rs.EmployeeKey = e.EmployeeKey\nORDER BY QuotaAttainment DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 65,
+      "question": "Weekend vs weekday Internet Sales Amount in 2012",
+      "gold_sql": "SELECT\n    CASE\n        WHEN d.EnglishDayNameOfWeek IN ('Saturday', 'Sunday') THEN 'Weekend'\n        ELSE 'Weekday'\n    END AS DayType,\n    SUM(fis.SalesAmount) AS TotalSalesAmount,\n    COUNT(DISTINCT fis.SalesOrderNumber) AS OrderCount\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear = 2012\nGROUP BY CASE\n             WHEN d.EnglishDayNameOfWeek IN ('Saturday', 'Sunday') THEN 'Weekend'\n             ELSE 'Weekday'\n         END\nORDER BY DayType DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  

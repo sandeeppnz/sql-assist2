@@ -1,0 +1,168 @@
+[
+    {
+      "id": 76,
+      "question": "Inventory data quality: product inventory rows with DateKey not found in DimDate between 2010 and 2014",
+      "gold_sql": "SELECT fpi.ProductKey, fpi.DateKey, fpi.UnitsBalance\nFROM FactProductInventory AS fpi\nLEFT JOIN DimDate AS d ON fpi.DateKey = d.DateKey\nWHERE d.DateKey IS NULL\nORDER BY fpi.DateKey, fpi.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 77,
+      "question": "Inventory anomalies: negative UnitsBalance or negative UnitsIn/UnitsOut between 2010 and 2014",
+      "gold_sql": "SELECT fpi.ProductKey, fpi.DateKey, d.FullDateAlternateKey, fpi.UnitsIn, fpi.UnitsOut, fpi.UnitsBalance\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND (fpi.UnitsIn < 0 OR fpi.UnitsOut < 0 OR fpi.UnitsBalance < 0)\nORDER BY d.FullDateAlternateKey, fpi.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 78,
+      "question": "Inventory gap check: missing daily inventory snapshots (expected 365 per product per year) for years 2010–2014",
+      "gold_sql": "WITH ExpectedDates AS (\n    SELECT DateKey\n    FROM DimDate\n    WHERE CalendarYear BETWEEN 2010 AND 2014\n), Inventory AS (\n    SELECT DISTINCT ProductKey, DateKey FROM FactProductInventory\n    WHERE DateKey IN (SELECT DateKey FROM ExpectedDates)\n)\nSELECT p.ProductKey, p.EnglishProductName,\n       COUNT(ed.DateKey) AS ExpectedDays,\n       COUNT(i.DateKey) AS ActualDays,\n       COUNT(ed.DateKey) - COUNT(i.DateKey) AS MissingDays\nFROM DimProduct AS p\nCROSS JOIN ExpectedDates AS ed\nLEFT JOIN Inventory AS i\n    ON p.ProductKey = i.ProductKey AND ed.DateKey = i.DateKey\nGROUP BY p.ProductKey, p.EnglishProductName\nHAVING COUNT(ed.DateKey) - COUNT(i.DateKey) > 0\nORDER BY MissingDays DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 79,
+      "question": "Inventory vs sales mismatch: Internet sales recorded on products that had zero inventory on the same date",
+      "gold_sql": "SELECT fis.ProductKey, p.EnglishProductName,\n       d.FullDateAlternateKey AS SalesDate,\n       fpi.UnitsBalance AS InventoryOnDay,\n       fis.OrderQuantity, fis.SalesAmount\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nLEFT JOIN FactProductInventory AS fpi\n    ON fis.ProductKey = fpi.ProductKey AND fis.OrderDateKey = fpi.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND (fpi.UnitsBalance IS NULL OR fpi.UnitsBalance = 0)\nORDER BY SalesDate DESC, fis.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 80,
+      "question": "Inventory vs sales spike: products where daily sales exceed available inventory balance more than 3 times between 2010 and 2014",
+      "gold_sql": "WITH DailySales AS (\n    SELECT fis.ProductKey, fis.OrderDateKey AS DateKey,\n           SUM(fis.OrderQuantity) AS TotalDailyQty\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey, fis.OrderDateKey\n)\nSELECT ds.ProductKey, p.EnglishProductName, ds.DateKey, d.FullDateAlternateKey,\n       ds.TotalDailyQty, fpi.UnitsBalance\nFROM DailySales AS ds\nJOIN DimProduct AS p ON ds.ProductKey = p.ProductKey\nLEFT JOIN FactProductInventory AS fpi\n    ON ds.ProductKey = fpi.ProductKey AND ds.DateKey = fpi.DateKey\nJOIN DimDate AS d ON ds.DateKey = d.DateKey\nWHERE fpi.UnitsBalance IS NOT NULL\n  AND ds.TotalDailyQty > (fpi.UnitsBalance * 3)\nORDER BY ds.TotalDailyQty DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 81,
+      "question": "Supply chain: identify products with large sudden drops in inventory (UnitsBalance decreases by more than 30% day-over-day)",
+      "gold_sql": "WITH Inv AS (\n    SELECT ProductKey, DateKey, UnitsBalance,\n           LAG(UnitsBalance) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS PrevBalance\n    FROM FactProductInventory\n)\nSELECT i.ProductKey, p.EnglishProductName,\n       i.DateKey, d.FullDateAlternateKey,\n       i.PrevBalance, i.UnitsBalance,\n       (i.PrevBalance - i.UnitsBalance) AS DropAmount\nFROM Inv AS i\nJOIN DimProduct AS p ON i.ProductKey = p.ProductKey\nJOIN DimDate AS d ON i.DateKey = d.DateKey\nWHERE i.PrevBalance IS NOT NULL\n  AND i.UnitsBalance < (i.PrevBalance * 0.7)\nORDER BY DropAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 82,
+      "question": "Supply chain forecasting: products with steadily decreasing inventory for 10 consecutive days (possible stockout risk)",
+      "gold_sql": "WITH OrderedInv AS (\n    SELECT ProductKey, DateKey, UnitsBalance,\n           LAG(UnitsBalance, 1) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev1,\n           LAG(UnitsBalance, 2) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev2,\n           LAG(UnitsBalance, 3) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev3,\n           LAG(UnitsBalance, 4) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev4,\n           LAG(UnitsBalance, 5) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev5,\n           LAG(UnitsBalance, 6) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev6,\n           LAG(UnitsBalance, 7) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev7,\n           LAG(UnitsBalance, 8) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev8,\n           LAG(UnitsBalance, 9) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev9\n    FROM FactProductInventory\n)\nSELECT oi.ProductKey, p.EnglishProductName, oi.DateKey, d.FullDateAlternateKey, oi.UnitsBalance\nFROM OrderedInv AS oi\nJOIN DimProduct AS p ON oi.ProductKey = p.ProductKey\nJOIN DimDate AS d ON oi.DateKey = d.DateKey\nWHERE oi.Prev9 IS NOT NULL\n  AND oi.UnitsBalance < oi.Prev1\n  AND oi.Prev1 < oi.Prev2\n  AND oi.Prev2 < oi.Prev3\n  AND oi.Prev3 < oi.Prev4\n  AND oi.Prev4 < oi.Prev5\n  AND oi.Prev5 < oi.Prev6\n  AND oi.Prev6 < oi.Prev7\n  AND oi.Prev7 < oi.Prev8\n  AND oi.Prev8 < oi.Prev9\nORDER BY oi.ProductKey, oi.DateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 83,
+      "question": "Warehouse efficiency: average UnitsIn and UnitsOut per warehouse between 2010 and 2014",
+      "gold_sql": "SELECT w.WarehouseKey, w.WarehouseName,\n       AVG(CAST(fpi.UnitsIn AS FLOAT)) AS AvgUnitsIn,\n       AVG(CAST(fpi.UnitsOut AS FLOAT)) AS AvgUnitsOut\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nJOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\nJOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\nJOIN DimWarehouse AS w ON p.WeightUnitMeasureCode = w.WarehouseKey -- placeholder (AW lacks warehouse fact join)\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY w.WarehouseKey, w.WarehouseName\nORDER BY AvgUnitsOut DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 84,
+      "question": "Stock aging: products with inventory older than 180 days (units that have not moved for 6+ months)",
+      "gold_sql": "WITH DailyInv AS (\n    SELECT ProductKey, DateKey, UnitsBalance,\n           LAG(UnitsBalance) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS PrevBalance\n    FROM FactProductInventory\n)\nSELECT di.ProductKey, p.EnglishProductName,\n       di.DateKey, d.FullDateAlternateKey, di.UnitsBalance\nFROM DailyInv AS di\nJOIN DimProduct AS p ON di.ProductKey = p.ProductKey\nJOIN DimDate AS d ON di.DateKey = d.DateKey\nWHERE di.UnitsBalance > 0\n  AND di.PrevBalance = di.UnitsBalance\n  AND d.FullDateAlternateKey <= DATEADD(DAY, -180, (SELECT MAX(FullDateAlternateKey) FROM DimDate))\nORDER BY di.ProductKey, di.DateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 85,
+      "question": "Slow movers: products with fewer than 10 inventory changes (UnitsIn + UnitsOut events) per year between 2010 and 2014",
+      "gold_sql": "SELECT fpi.ProductKey, p.EnglishProductName,\n       d.CalendarYear,\n       COUNT(*) AS InventoryEvents\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND (fpi.UnitsIn <> 0 OR fpi.UnitsOut <> 0)\nGROUP BY fpi.ProductKey, p.EnglishProductName, d.CalendarYear\nHAVING COUNT(*) < 10\nORDER BY InventoryEvents ASC, d.CalendarYear;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 86,
+      "question": "Supply chain variance: products with high volatility in UnitsBalance (standard deviation > 2x mean) between 2010 and 2014",
+      "gold_sql": "SELECT fpi.ProductKey, p.EnglishProductName,\n       AVG(CAST(fpi.UnitsBalance AS FLOAT)) AS AvgBalance,\n       STDEV(CAST(fpi.UnitsBalance AS FLOAT)) AS StdDevBalance\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY fpi.ProductKey, p.EnglishProductName\nHAVING STDEV(CAST(fpi.UnitsBalance AS FLOAT)) > (2 * AVG(CAST(fpi.UnitsBalance AS FLOAT)))\nORDER BY StdDevBalance DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 87,
+      "question": "Supply chain: identify products with recurring stockouts (UnitsBalance = 0 for 5 or more consecutive days)",
+      "gold_sql": "WITH ZeroInv AS (\n    SELECT ProductKey, DateKey, UnitsBalance,\n           LAG(UnitsBalance, 1) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev1,\n           LAG(UnitsBalance, 2) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev2,\n           LAG(UnitsBalance, 3) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev3,\n           LAG(UnitsBalance, 4) OVER (PARTITION BY ProductKey ORDER BY DateKey) AS Prev4\n    FROM FactProductInventory\n)\nSELECT z.ProductKey, p.EnglishProductName,\n       z.DateKey, d.FullDateAlternateKey\nFROM ZeroInv AS z\nJOIN DimProduct AS p ON z.ProductKey = p.ProductKey\nJOIN DimDate AS d ON z.DateKey = d.DateKey\nWHERE z.UnitsBalance = 0\n  AND z.Prev1 = 0\n  AND z.Prev2 = 0\n  AND z.Prev3 = 0\n  AND z.Prev4 = 0\nORDER BY z.ProductKey, z.DateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 88,
+      "question": "Supply chain mismatch: products showing inventory movement (UnitsIn/Out) on days with zero ending balance",
+      "gold_sql": "SELECT fpi.ProductKey, p.EnglishProductName,\n       fpi.DateKey, d.FullDateAlternateKey,\n       fpi.UnitsIn, fpi.UnitsOut, fpi.UnitsBalance\nFROM FactProductInventory AS fpi\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nWHERE (fpi.UnitsIn <> 0 OR fpi.UnitsOut <> 0)\n  AND fpi.UnitsBalance = 0\nORDER BY fpi.ProductKey, fpi.DateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 89,
+      "question": "Inventory completeness: identify products that appear in sales (internet or reseller) but never appear in inventory in years 2010–2014",
+      "gold_sql": "WITH SalesProducts AS (\n    SELECT DISTINCT ProductKey\n    FROM FactInternetSales AS fis JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    UNION\n    SELECT DISTINCT ProductKey\n    FROM FactResellerSales AS frs JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n), InvProducts AS (\n    SELECT DISTINCT ProductKey FROM FactProductInventory\n)\nSELECT sp.ProductKey, p.EnglishProductName\nFROM SalesProducts AS sp\nLEFT JOIN InvProducts AS ip ON sp.ProductKey = ip.ProductKey\nJOIN DimProduct AS p ON sp.ProductKey = p.ProductKey\nWHERE ip.ProductKey IS NULL\nORDER BY sp.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 90,
+      "question": "Supply chain cross-check: products with more UnitsOut than UnitsIn over the full period 2010–2014 (potential negative availability issue)",
+      "gold_sql": "SELECT fpi.ProductKey, p.EnglishProductName,\n       SUM(fpi.UnitsIn) AS TotalUnitsIn,\n       SUM(fpi.UnitsOut) AS TotalUnitsOut,\n       SUM(fpi.UnitsOut) - SUM(fpi.UnitsIn) AS Deficit\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nJOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY fpi.ProductKey, p.EnglishProductName\nHAVING SUM(fpi.UnitsOut) > SUM(fpi.UnitsIn)\nORDER BY Deficit DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  

@@ -1,0 +1,113 @@
+[
+    {
+      "id": 91,
+      "question": "Rolling 90-day Internet demand per product in 2014 with moving average and peak days (stress test on window functions and date joins)",
+      "gold_sql": "WITH Internet2014 AS (\n    SELECT\n        fis.ProductKey,\n        d.DateKey,\n        d.FullDateAlternateKey AS OrderDate,\n        SUM(fis.OrderQuantity) AS DailyQty\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear = 2014\n    GROUP BY fis.ProductKey, d.DateKey, d.FullDateAlternateKey\n), RollingDemand AS (\n    SELECT\n        i.ProductKey,\n        i.DateKey,\n        i.OrderDate,\n        i.DailyQty,\n        SUM(i.DailyQty) OVER (\n            PARTITION BY i.ProductKey\n            ORDER BY i.OrderDate\n            ROWS BETWEEN 89 PRECEDING AND CURRENT ROW\n        ) AS QtyLast90Days,\n        AVG(CAST(i.DailyQty AS FLOAT)) OVER (\n            PARTITION BY i.ProductKey\n            ORDER BY i.OrderDate\n            ROWS BETWEEN 89 PRECEDING AND CURRENT ROW\n        ) AS AvgDailyQtyLast90Days\n    FROM Internet2014 AS i\n)\nSELECT\n    rd.ProductKey,\n    p.EnglishProductName,\n    rd.OrderDate,\n    rd.DailyQty,\n    rd.QtyLast90Days,\n    rd.AvgDailyQtyLast90Days\nFROM RollingDemand AS rd\nJOIN DimProduct AS p ON rd.ProductKey = p.ProductKey\nWHERE rd.QtyLast90Days IS NOT NULL\nORDER BY rd.ProductKey, rd.OrderDate;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 92,
+      "question": "Annual reconciliation: Internet Sales OrderQuantity vs Inventory UnitsOut per product between 2010 and 2014, with usage ratio",
+      "gold_sql": "WITH InternetQty AS (\n    SELECT\n        fis.ProductKey,\n        d.CalendarYear,\n        SUM(fis.OrderQuantity) AS InternetQty\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey, d.CalendarYear\n), InventoryOut AS (\n    SELECT\n        fpi.ProductKey,\n        d.CalendarYear,\n        SUM(fpi.UnitsOut) AS UnitsOut\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fpi.ProductKey, d.CalendarYear\n)\nSELECT\n    COALESCE(i.ProductKey, inv.ProductKey) AS ProductKey,\n    p.EnglishProductName,\n    COALESCE(i.CalendarYear, inv.CalendarYear) AS CalendarYear,\n    ISNULL(i.InternetQty, 0) AS InternetQty,\n    ISNULL(inv.UnitsOut, 0) AS UnitsOut,\n    CASE\n        WHEN ISNULL(inv.UnitsOut, 0) = 0 THEN NULL\n        ELSE ISNULL(i.InternetQty, 0) / CAST(inv.UnitsOut AS FLOAT)\n    END AS InternetToInventoryRatio\nFROM InternetQty AS i\nFULL OUTER JOIN InventoryOut AS inv\n    ON i.ProductKey = inv.ProductKey\n   AND i.CalendarYear = inv.CalendarYear\nJOIN DimProduct AS p\n    ON p.ProductKey = COALESCE(i.ProductKey, inv.ProductKey)\nORDER BY CalendarYear, ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 93,
+      "question": "Sales days without inventory snapshot: count days where a product had Internet sales but no inventory record for that date between 2010 and 2014",
+      "gold_sql": "WITH SalesDays AS (\n    SELECT\n        fis.ProductKey,\n        fis.OrderDateKey AS DateKey,\n        SUM(fis.OrderQuantity) AS TotalQty\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey, fis.OrderDateKey\n), InvDays AS (\n    SELECT DISTINCT\n        fpi.ProductKey,\n        fpi.DateKey\n    FROM FactProductInventory AS fpi\n)\nSELECT\n    sd.ProductKey,\n    p.EnglishProductName,\n    COUNT(*) AS SalesDaysWithoutInventory\nFROM SalesDays AS sd\nLEFT JOIN InvDays AS id\n    ON sd.ProductKey = id.ProductKey\n   AND sd.DateKey = id.DateKey\nJOIN DimProduct AS p ON sd.ProductKey = p.ProductKey\nWHERE id.DateKey IS NULL\nGROUP BY sd.ProductKey, p.EnglishProductName\nORDER BY SalesDaysWithoutInventory DESC, sd.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 94,
+      "question": "Lead time estimate: average days between inventory replenishment (UnitsIn > 0) and first Internet sale after that replenishment per product between 2010 and 2014",
+      "gold_sql": "WITH Replenishments AS (\n    SELECT\n        fpi.ProductKey,\n        fpi.DateKey,\n        d.FullDateAlternateKey AS ReplenishDate,\n        fpi.UnitsIn,\n        ROW_NUMBER() OVER (\n            PARTITION BY fpi.ProductKey, fpi.DateKey\n            ORDER BY fpi.DateKey\n        ) AS rn\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE fpi.UnitsIn > 0\n      AND d.CalendarYear BETWEEN 2010 AND 2014\n), NextSales AS (\n    SELECT\n        r.ProductKey,\n        r.DateKey AS ReplenishDateKey,\n        r.ReplenishDate,\n        MIN(d2.DateKey) AS FirstSaleDateKey\n    FROM Replenishments AS r\n    JOIN FactInternetSales AS fis\n        ON r.ProductKey = fis.ProductKey\n    JOIN DimDate AS d2 ON fis.OrderDateKey = d2.DateKey\n    WHERE d2.DateKey > r.DateKey\n    GROUP BY r.ProductKey, r.DateKey, r.ReplenishDate\n)\nSELECT\n    ns.ProductKey,\n    p.EnglishProductName,\n    AVG(DATEDIFF(DAY, ns.ReplenishDateKey, ns.FirstSaleDateKey)) AS AvgLeadTimeDays\nFROM NextSales AS ns\nJOIN DimProduct AS p ON ns.ProductKey = p.ProductKey\nGROUP BY ns.ProductKey, p.EnglishProductName\nHAVING AVG(DATEDIFF(DAY, ns.ReplenishDateKey, ns.FirstSaleDateKey)) IS NOT NULL\nORDER BY AvgLeadTimeDays ASC, ns.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 95,
+      "question": "Service level by Sales Territory: proportion of sales days with stockout (UnitsBalance = 0) for products sold in each territory between 2010 and 2014",
+      "gold_sql": "WITH SalesPerDayTerritory AS (\n    SELECT\n        fis.ProductKey,\n        fis.OrderDateKey AS DateKey,\n        st.SalesTerritoryRegion,\n        SUM(fis.OrderQuantity) AS TotalQty\n    FROM FactInternetSales AS fis\n    JOIN DimSalesTerritory AS st ON fis.SalesTerritoryKey = st.SalesTerritoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey, fis.OrderDateKey, st.SalesTerritoryRegion\n), InvPerDay AS (\n    SELECT\n        fpi.ProductKey,\n        fpi.DateKey,\n        fpi.UnitsBalance\n    FROM FactProductInventory AS fpi\n)\nSELECT\n    s.SalesTerritoryRegion,\n    COUNT(*) AS SalesDays,\n    SUM(CASE WHEN ISNULL(i.UnitsBalance, 0) = 0 THEN 1 ELSE 0 END) AS StockoutSalesDays,\n    CASE\n        WHEN COUNT(*) = 0 THEN NULL\n        ELSE CAST(SUM(CASE WHEN ISNULL(i.UnitsBalance, 0) = 0 THEN 1 ELSE 0 END) AS FLOAT) / COUNT(*)\n    END AS StockoutRate\nFROM SalesPerDayTerritory AS s\nLEFT JOIN InvPerDay AS i\n    ON s.ProductKey = i.ProductKey\n   AND s.DateKey = i.DateKey\nGROUP BY s.SalesTerritoryRegion\nORDER BY StockoutRate DESC, s.SalesTerritoryRegion;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 96,
+      "question": "Capacity utilization: monthly Internet Sales Amount divided by average inventory UnitsBalance per Product Category between 2010 and 2014",
+      "gold_sql": "WITH InvMonthly AS (\n    SELECT\n        psc.ProductCategoryKey,\n        pc.EnglishProductCategoryName,\n        d.CalendarYear,\n        d.MonthNumberOfYear,\n        AVG(CAST(fpi.UnitsBalance AS FLOAT)) AS AvgUnitsBalance\n    FROM FactProductInventory AS fpi\n    JOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\n    JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\n    JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY psc.ProductCategoryKey, pc.EnglishProductCategoryName, d.CalendarYear, d.MonthNumberOfYear\n), SalesMonthly AS (\n    SELECT\n        psc.ProductCategoryKey,\n        d.CalendarYear,\n        d.MonthNumberOfYear,\n        SUM(fis.SalesAmount) AS SalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\n    JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY psc.ProductCategoryKey, d.CalendarYear, d.MonthNumberOfYear\n)\nSELECT\n    inv.CalendarYear,\n    inv.MonthNumberOfYear,\n    inv.EnglishProductCategoryName,\n    inv.AvgUnitsBalance,\n    ISNULL(s.SalesAmount, 0) AS SalesAmount,\n    CASE\n        WHEN inv.AvgUnitsBalance = 0 THEN NULL\n        ELSE s.SalesAmount / inv.AvgUnitsBalance\n    END AS CapacityUtilization\nFROM InvMonthly AS inv\nLEFT JOIN SalesMonthly AS s\n    ON inv.ProductCategoryKey = s.ProductCategoryKey\n   AND inv.CalendarYear = s.CalendarYear\n   AND inv.MonthNumberOfYear = s.MonthNumberOfYear\nORDER BY inv.CalendarYear, inv.MonthNumberOfYear, inv.EnglishProductCategoryName;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 97,
+      "question": "Promotion impact with inventory: for each promotion in 2012–2013, compare promoted units sold vs average inventory of promoted products during the promo period",
+      "gold_sql": "WITH PromoSales AS (\n    SELECT\n        pr.PromotionKey,\n        pr.EnglishPromotionName,\n        MIN(d.FullDateAlternateKey) AS PromoStart,\n        MAX(d.FullDateAlternateKey) AS PromoEnd,\n        SUM(fis.OrderQuantity) AS PromoUnits\n    FROM FactInternetSales AS fis\n    JOIN DimPromotion AS pr ON fis.PromotionKey = pr.PromotionKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2012 AND 2013\n      AND fis.PromotionKey IS NOT NULL\n    GROUP BY pr.PromotionKey, pr.EnglishPromotionName\n), PromoInventory AS (\n    SELECT\n        ps.PromotionKey,\n        AVG(CAST(fpi.UnitsBalance AS FLOAT)) AS AvgUnitsBalanceDuringPromo\n    FROM PromoSales AS ps\n    JOIN FactInternetSales AS fis ON ps.PromotionKey = fis.PromotionKey\n    JOIN FactProductInventory AS fpi\n        ON fis.ProductKey = fpi.ProductKey\n    JOIN DimDate AS dInv ON fpi.DateKey = dInv.DateKey\n    WHERE dInv.FullDateAlternateKey BETWEEN ps.PromoStart AND ps.PromoEnd\n    GROUP BY ps.PromotionKey\n)\nSELECT\n    ps.PromotionKey,\n    ps.EnglishPromotionName,\n    ps.PromoStart,\n    ps.PromoEnd,\n    ps.PromoUnits,\n    pi.AvgUnitsBalanceDuringPromo,\n    CASE\n        WHEN pi.AvgUnitsBalanceDuringPromo = 0 THEN NULL\n        ELSE ps.PromoUnits / pi.AvgUnitsBalanceDuringPromo\n    END AS UnitsToInventoryRatio\nFROM PromoSales AS ps\nLEFT JOIN PromoInventory AS pi ON ps.PromotionKey = pi.PromotionKey\nORDER BY ps.PromoUnits DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 98,
+      "question": "Forecast bias: compare naive forecast (previous year's monthly Internet Sales) vs actual by Product Category for 2011–2014",
+      "gold_sql": "WITH SalesMonthly AS (\n    SELECT\n        pc.ProductCategoryKey,\n        pc.EnglishProductCategoryName,\n        d.CalendarYear,\n        d.MonthNumberOfYear,\n        SUM(fis.SalesAmount) AS SalesAmount\n    FROM FactInternetSales AS fis\n    JOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\n    JOIN DimProductSubcategory AS psc ON p.ProductSubcategoryKey = psc.ProductSubcategoryKey\n    JOIN DimProductCategory AS pc ON psc.ProductCategoryKey = pc.ProductCategoryKey\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY pc.ProductCategoryKey, pc.EnglishProductCategoryName, d.CalendarYear, d.MonthNumberOfYear\n), WithLag AS (\n    SELECT\n        sm.ProductCategoryKey,\n        sm.EnglishProductCategoryName,\n        sm.CalendarYear,\n        sm.MonthNumberOfYear,\n        sm.SalesAmount AS ActualSales,\n        LAG(sm.SalesAmount) OVER (\n            PARTITION BY sm.ProductCategoryKey, sm.MonthNumberOfYear\n            ORDER BY sm.CalendarYear\n        ) AS PrevYearSales\n    FROM SalesMonthly AS sm\n)\nSELECT\n    wl.ProductCategoryKey,\n    wl.EnglishProductCategoryName,\n    wl.CalendarYear,\n    wl.MonthNumberOfYear,\n    wl.PrevYearSales AS Forecast,\n    wl.ActualSales,\n    (wl.ActualSales - wl.PrevYearSales) AS ForecastError,\n    CASE\n        WHEN wl.PrevYearSales = 0 THEN NULL\n        ELSE (wl.ActualSales - wl.PrevYearSales) / wl.PrevYearSales\n    END AS ForecastBiasPct\nFROM WithLag AS wl\nWHERE wl.CalendarYear BETWEEN 2011 AND 2014\n  AND wl.PrevYearSales IS NOT NULL\nORDER BY wl.CalendarYear, wl.MonthNumberOfYear, wl.ProductCategoryKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 99,
+      "question": "Cold-start SKUs: products first sold in 2013–2014 and their initial 60-day inventory and sales patterns",
+      "gold_sql": "WITH FirstSale AS (\n    SELECT\n        fis.ProductKey,\n        MIN(d.DateKey) AS FirstSaleDateKey,\n        MIN(d.FullDateAlternateKey) AS FirstSaleDate\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    GROUP BY fis.ProductKey\n), NewSkus AS (\n    SELECT\n        fs.ProductKey,\n        fs.FirstSaleDateKey,\n        fs.FirstSaleDate\n    FROM FirstSale AS fs\n    JOIN DimDate AS d ON fs.FirstSaleDateKey = d.DateKey\n    WHERE d.CalendarYear IN (2013, 2014)\n), DateWindow AS (\n    SELECT\n        ns.ProductKey,\n        ns.FirstSaleDateKey,\n        ns.FirstSaleDate,\n        d2.DateKey,\n        d2.FullDateAlternateKey\n    FROM NewSkus AS ns\n    JOIN DimDate AS d2\n        ON d2.DateKey BETWEEN ns.FirstSaleDateKey AND DATEADD(DAY, 60, ns.FirstSaleDateKey)\n)\nSELECT\n    dw.ProductKey,\n    p.EnglishProductName,\n    dw.FullDateAlternateKey AS TheDate,\n    ISNULL(inv.UnitsBalance, 0) AS UnitsBalance,\n    ISNULL(sales.DailyQty, 0) AS DailyQty\nFROM DateWindow AS dw\nJOIN DimProduct AS p ON dw.ProductKey = p.ProductKey\nLEFT JOIN FactProductInventory AS inv\n    ON dw.ProductKey = inv.ProductKey\n   AND dw.DateKey = inv.DateKey\nLEFT JOIN (\n    SELECT\n        fis.ProductKey,\n        fis.OrderDateKey AS DateKey,\n        SUM(fis.OrderQuantity) AS DailyQty\n    FROM FactInternetSales AS fis\n    GROUP BY fis.ProductKey, fis.OrderDateKey\n) AS sales\n    ON dw.ProductKey = sales.ProductKey\n   AND dw.DateKey = sales.DateKey\nORDER BY dw.ProductKey, dw.FullDateAlternateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 100,
+      "question": "Supply risk index: composite score per product using stockout frequency, inventory volatility, and lead-time proxy between 2010 and 2014",
+      "gold_sql": "WITH Stockouts AS (\n    SELECT\n        fpi.ProductKey,\n        COUNT(*) AS StockoutDays\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n      AND fpi.UnitsBalance = 0\n    GROUP BY fpi.ProductKey\n), Volatility AS (\n    SELECT\n        fpi.ProductKey,\n        STDEV(CAST(fpi.UnitsBalance AS FLOAT)) AS BalanceStdDev\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fpi.ProductKey\n), LeadProxy AS (\n    SELECT\n        fis.ProductKey,\n        AVG(DATEDIFF(DAY,\n            LAG(d.DateKey) OVER (PARTITION BY fis.ProductKey ORDER BY d.DateKey),\n            d.DateKey\n        )) AS AvgDaysBetweenSales\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey\n), Combined AS (\n    SELECT\n        p.ProductKey,\n        p.EnglishProductName,\n        ISNULL(s.StockoutDays, 0) AS StockoutDays,\n        ISNULL(v.BalanceStdDev, 0) AS BalanceStdDev,\n        ISNULL(l.AvgDaysBetweenSales, 0) AS AvgDaysBetweenSales\n    FROM DimProduct AS p\n    LEFT JOIN Stockouts AS s ON p.ProductKey = s.ProductKey\n    LEFT JOIN Volatility AS v ON p.ProductKey = v.ProductKey\n    LEFT JOIN LeadProxy AS l ON p.ProductKey = l.ProductKey\n)\nSELECT\n    ProductKey,\n    EnglishProductName,\n    StockoutDays,\n    BalanceStdDev,\n    AvgDaysBetweenSales,\n    (CAST(StockoutDays AS FLOAT) * 0.5\n     + BalanceStdDev * 0.3\n     + AvgDaysBetweenSales * 0.2) AS SupplyRiskScore\nFROM Combined\nWHERE StockoutDays > 0\n   OR BalanceStdDev > 0\n   OR AvgDaysBetweenSales > 0\nORDER BY SupplyRiskScore DESC, ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  

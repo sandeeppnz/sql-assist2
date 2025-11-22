@@ -1,0 +1,113 @@
+[
+    {
+      "id": 66,
+      "question": "Data quality check: duplicate Internet order lines (same SalesOrderNumber and SalesOrderLineNumber appearing more than once) between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    COUNT(*) AS DuplicateCount,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY fis.SalesOrderNumber, fis.SalesOrderLineNumber\nHAVING COUNT(*) > 1\nORDER BY DuplicateCount DESC, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 67,
+      "question": "Data quality check: Internet Sales facts with missing customer dimension (CustomerKey not found in DimCustomer) between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.CustomerKey,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nLEFT JOIN DimCustomer AS c ON fis.CustomerKey = c.CustomerKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND c.CustomerKey IS NULL\nORDER BY d.FullDateAlternateKey, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 68,
+      "question": "Data quality check: Internet Sales facts with missing or invalid currency dimension (CurrencyKey not found in DimCurrency) between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.CurrencyKey,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nLEFT JOIN DimCurrency AS cu ON fis.CurrencyKey = cu.CurrencyKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND cu.CurrencyKey IS NULL\nORDER BY d.FullDateAlternateKey, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 69,
+      "question": "Data quality check: Internet Sales rows with non-positive quantities or non-positive sales amounts between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.OrderQuantity,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate,\n    p.ProductKey,\n    p.EnglishProductName\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND (fis.OrderQuantity <= 0 OR fis.SalesAmount <= 0)\nORDER BY d.FullDateAlternateKey, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 70,
+      "question": "Data quality check: Internet Sales rows where the extended price (UnitPrice * OrderQuantity) differs significantly from SalesAmount between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.OrderQuantity,\n    fis.UnitPrice,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate,\n    (fis.UnitPrice * fis.OrderQuantity) AS CalculatedExtendedPrice,\n    (fis.SalesAmount - (fis.UnitPrice * fis.OrderQuantity)) AS Difference\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND ABS(fis.SalesAmount - (fis.UnitPrice * fis.OrderQuantity)) > 0.01\nORDER BY ABS(fis.SalesAmount - (fis.UnitPrice * fis.OrderQuantity)) DESC, d.FullDateAlternateKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 71,
+      "question": "Data quality check: product inventory records with missing product dimension (ProductKey not found in DimProduct) between 2010 and 2014",
+      "gold_sql": "SELECT\n    fpi.ProductKey,\n    fpi.DateKey,\n    d.FullDateAlternateKey AS InventoryDate,\n    fpi.UnitsIn,\n    fpi.UnitsOut,\n    fpi.UnitsBalance\nFROM FactProductInventory AS fpi\nJOIN DimDate AS d ON fpi.DateKey = d.DateKey\nLEFT JOIN DimProduct AS p ON fpi.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND p.ProductKey IS NULL\nORDER BY d.FullDateAlternateKey, fpi.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 72,
+      "question": "Data quality check: Internet Sales rows with promotion keys where the order date falls outside the promotion start and end dates between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.PromotionKey,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate,\n    pr.EnglishPromotionName,\n    pr.StartDate,\n    pr.EndDate\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nJOIN DimPromotion AS pr ON fis.PromotionKey = pr.PromotionKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND fis.PromotionKey IS NOT NULL\n  AND (d.FullDateAlternateKey < pr.StartDate OR d.FullDateAlternateKey > pr.EndDate)\nORDER BY d.FullDateAlternateKey, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 73,
+      "question": "Data quality check: Reseller Sales facts with missing reseller dimension (ResellerKey not found in DimReseller) between 2010 and 2013",
+      "gold_sql": "SELECT\n    frs.SalesOrderNumber,\n    frs.SalesOrderLineNumber,\n    frs.ResellerKey,\n    frs.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate\nFROM FactResellerSales AS frs\nJOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\nLEFT JOIN DimReseller AS r ON frs.ResellerKey = r.ResellerKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2013\n  AND r.ResellerKey IS NULL\nORDER BY d.FullDateAlternateKey, frs.SalesOrderNumber, frs.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 74,
+      "question": "Data quality check: Internet Sales facts with invalid order date key (OrderDateKey not found in DimDate) between 2010 and 2014",
+      "gold_sql": "SELECT\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.OrderDateKey,\n    fis.SalesAmount\nFROM FactInternetSales AS fis\nLEFT JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.DateKey IS NULL\nORDER BY fis.OrderDateKey, fis.SalesOrderNumber, fis.SalesOrderLineNumber;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 75,
+      "question": "Data quality check: suspiciously large Internet Sales Amount outliers (top 50 highest line-level SalesAmount values) between 2010 and 2014",
+      "gold_sql": "SELECT TOP 50\n    fis.SalesOrderNumber,\n    fis.SalesOrderLineNumber,\n    fis.OrderQuantity,\n    fis.UnitPrice,\n    fis.SalesAmount,\n    d.FullDateAlternateKey AS OrderDate,\n    p.ProductKey,\n    p.EnglishProductName\nFROM FactInternetSales AS fis\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nORDER BY fis.SalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  

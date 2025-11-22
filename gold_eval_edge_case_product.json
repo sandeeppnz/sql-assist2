@@ -1,0 +1,113 @@
+[
+    {
+      "id": 46,
+      "question": "Products that have Internet Sales only in 2014 and no Internet Sales in any other year",
+      "gold_sql": "WITH ProductYears AS (\n    SELECT\n        fis.ProductKey,\n        MIN(d.CalendarYear) AS MinYear,\n        MAX(d.CalendarYear) AS MaxYear\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName\nFROM ProductYears AS py\nJOIN DimProduct AS p ON py.ProductKey = p.ProductKey\nWHERE py.MinYear = 2014\n  AND py.MaxYear = 2014;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 47,
+      "question": "Products with Internet Sales between 2010 and 2013 but no Reseller Sales in the same period",
+      "gold_sql": "WITH InternetProducts AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n), ResellerProducts AS (\n    SELECT DISTINCT\n        frs.ProductKey\n    FROM FactResellerSales AS frs\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName\nFROM InternetProducts AS ip\nLEFT JOIN ResellerProducts AS rp ON ip.ProductKey = rp.ProductKey\nJOIN DimProduct AS p ON ip.ProductKey = p.ProductKey\nWHERE rp.ProductKey IS NULL;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 48,
+      "question": "Products with Reseller Sales between 2010 and 2013 but no Internet Sales in the same period",
+      "gold_sql": "WITH InternetProducts AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n), ResellerProducts AS (\n    SELECT DISTINCT\n        frs.ProductKey\n    FROM FactResellerSales AS frs\n    JOIN DimDate AS d ON frs.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2013\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName\nFROM ResellerProducts AS rp\nLEFT JOIN InternetProducts AS ip ON rp.ProductKey = ip.ProductKey\nJOIN DimProduct AS p ON rp.ProductKey = p.ProductKey\nWHERE ip.ProductKey IS NULL;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 49,
+      "question": "Internet Sales Amount for products with no color (NULL Color) between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND p.Color IS NULL\nGROUP BY p.ProductKey, p.EnglishProductName\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 50,
+      "question": "Low-volume products: products with total Internet OrderQuantity less than or equal to 10 units between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.OrderQuantity) AS TotalOrderQuantity,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nHAVING SUM(fis.OrderQuantity) > 0\n   AND SUM(fis.OrderQuantity) <= 10\nORDER BY TotalOrderQuantity, TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 51,
+      "question": "Products with overall negative total Internet profit (SalesAmount - TotalProductCost) between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    SUM(fis.SalesAmount - fis.TotalProductCost) AS TotalProfit\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\nGROUP BY p.ProductKey, p.EnglishProductName\nHAVING SUM(fis.SalesAmount - fis.TotalProductCost) < 0\nORDER BY TotalProfit ASC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 52,
+      "question": "Products that appear in inventory but have no Internet Sales between 2010 and 2014",
+      "gold_sql": "WITH InternetProducts AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n), InventoryProducts AS (\n    SELECT DISTINCT\n        fpi.ProductKey\n    FROM FactProductInventory AS fpi\n    JOIN DimDate AS d ON fpi.DateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName\nFROM InventoryProducts AS ip\nLEFT JOIN InternetProducts AS it ON ip.ProductKey = it.ProductKey\nJOIN DimProduct AS p ON ip.ProductKey = p.ProductKey\nWHERE it.ProductKey IS NULL;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 53,
+      "question": "Products whose last Internet sale occurred before 2014 (stale products)",
+      "gold_sql": "WITH LastSale AS (\n    SELECT\n        fis.ProductKey,\n        MAX(d.CalendarYear) AS LastSaleYear\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n    GROUP BY fis.ProductKey\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    ls.LastSaleYear\nFROM LastSale AS ls\nJOIN DimProduct AS p ON ls.ProductKey = p.ProductKey\nWHERE ls.LastSaleYear < 2014\nORDER BY ls.LastSaleYear, p.ProductKey;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 54,
+      "question": "Products with Internet Sales that were never sold under a promotion between 2010 and 2014",
+      "gold_sql": "WITH AllInternetProducts AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n), PromotedProducts AS (\n    SELECT DISTINCT\n        fis.ProductKey\n    FROM FactInternetSales AS fis\n    JOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\n    WHERE d.CalendarYear BETWEEN 2010 AND 2014\n      AND fis.PromotionKey IS NOT NULL\n)\nSELECT\n    p.ProductKey,\n    p.EnglishProductName\nFROM AllInternetProducts AS aip\nLEFT JOIN PromotedProducts AS pp ON aip.ProductKey = pp.ProductKey\nJOIN DimProduct AS p ON aip.ProductKey = p.ProductKey\nWHERE pp.ProductKey IS NULL;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    },
+    {
+      "id": 55,
+      "question": "Products flagged as not finished goods (FinishedGoodsFlag = 0) that still have Internet Sales between 2010 and 2014",
+      "gold_sql": "SELECT\n    p.ProductKey,\n    p.EnglishProductName,\n    p.FinishedGoodsFlag,\n    SUM(fis.SalesAmount) AS TotalSalesAmount\nFROM FactInternetSales AS fis\nJOIN DimProduct AS p ON fis.ProductKey = p.ProductKey\nJOIN DimDate AS d ON fis.OrderDateKey = d.DateKey\nWHERE d.CalendarYear BETWEEN 2010 AND 2014\n  AND p.FinishedGoodsFlag = 0\nGROUP BY p.ProductKey, p.EnglishProductName, p.FinishedGoodsFlag\nORDER BY TotalSalesAmount DESC;",
+      "model_sql": "",
+      "validated": false,
+      "model_exec_ok": false,
+      "result_match": false,
+      "gold_error": null,
+      "model_error": null
+    }
+  ]
+  
