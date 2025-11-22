@@ -458,6 +458,46 @@ def generate_raw(question: str) -> Dict[str, Any]:
     sql = generate_sql(question)
     return {"sql": sql}
 
+def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
+    """
+    Generate N raw SQL variants from the model without validation or repair.
+
+    This function intentionally bypasses:
+    - schema inspector
+    - Chroma retrieval
+    - Vanna's validation
+    - automatic repair
+
+    Because for self-agreement confidence, we want *true raw model variability*.
+    """
+
+    from vn_local import LocalVanna  # your existing Ollama+Chroma Vanna instance
+
+    v = LocalVanna()
+    variants = []
+
+    prompt = (
+        "Generate only a SQL query. "
+        "Do NOT add explanation or Markdown. "
+        "Question: " + question
+    )
+
+    for _ in range(n):
+        try:
+            resp = v.ask(
+                prompt,
+                temperature=temperature,
+                top_p=0.95,
+                max_tokens=512
+            )
+            # v.ask() returns text; ensure it's stripped
+            sql_candidate = resp.strip()
+            variants.append(sql_candidate)
+        except Exception:
+            variants.append("")
+
+    return variants
+
 
 def validate_only(sql: str) -> Dict[str, Any]:
     ok, diag = _validate_sql(sql)
@@ -507,3 +547,35 @@ def _build_unknown_table_hints(unknown_tables: List[str]) -> str:
             )
 
     return "\n".join(lines)
+
+def embedding_similarity(model_sql: str, top_k: int = 3) -> float:
+    """
+    Compute embedding similarity score using ChromaDB (through Vanna).
+    Returns a float between 0 and 1.
+    """
+    from vn_local import LocalVanna
+
+    if not model_sql.strip():
+        return 0.0
+
+    try:
+        v = LocalVanna()
+
+        # Embed the model SQL
+        sql_embedding = v.embed(model_sql)
+
+        # Query nearest SQL examples
+        results = v.vectorstore.similarity_search_by_vector(sql_embedding, k=top_k)
+
+        if not results:
+            return 0.0
+
+        # Average the similarity scores
+        scores = [r.score for r in results if hasattr(r, "score")]
+        if not scores:
+            return 0.0
+
+        ess = sum(scores) / len(scores)
+        return max(0.0, min(1.0, ess))  # Normalize to [0,1]
+    except Exception:
+        return 0.0

@@ -123,6 +123,8 @@ def calibrated_confidence(
     row_count: Optional[int],
     sql_variants: Optional[List[str]] = None,
     embedding_sim: Optional[float] = None,
+    enable_self_agreement: bool = True, 
+    enable_ess: bool = True          
 ) -> Dict[str, Any]:
     """
     Orchestrates all the scoring components and returns:
@@ -134,10 +136,17 @@ def calibrated_confidence(
 
     svs = schema_validity_score(diagnostics)
     shs = structural_heuristic_score(model_sql)
-    sas = self_agreement_score(model_sql, sql_variants or [])
-    xbs = execution_behavior_score(exec_ok, row_count)
-    ess = embedding_similarity_score(embedding_sim)
+    
+    if enable_self_agreement and sql_variants:
+        sas = self_agreement_score(model_sql, sql_variants)
+    else:
+        sas = 0.0
 
+    xbs = execution_behavior_score(exec_ok, row_count)
+    if enable_ess and embedding_sim is not None:
+        ess = embedding_similarity_score(embedding_sim)
+    else:
+        ess = 0.0
     # Weighted combination (tunable)
     confidence = (
         0.25 * svs +

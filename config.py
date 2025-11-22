@@ -11,3 +11,11 @@ STRICT_PREFLIGHT: bool = os.getenv("STRICT_PREFLIGHT", "true").lower() == "true"
 
 GOLD_TRAIN_FILE: str = os.getenv("GOLD_TRAIN_FILE", "gold_eval.json")
 GOLD_TEST_FILE: str = os.getenv("GOLD_TEST_FILE", "gold_eval.json")
+
+ENABLE_SELF_AGREEMENT: str = os.getenv("ENABLE_SELF_AGREEMENT", "true").lower() == "true"
+SELF_AGREEMENT_VARIANTS: int = os.getenv("SELF_AGREEMENT_VARIANTS", 3)
+
+
+
+ENABLE_ESS: str = os.getenv("ENABLE_ESS", "true").lower() == "true"
+ESS_TOP_K: int = os.getenv("ESS_TOP_K", 3)
