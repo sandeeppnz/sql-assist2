@@ -9,4 +9,5 @@ OLLAMA_MODEL: str = os.getenv("OLLAMA_MODEL", "qwen2.5:7b-instruct")
 CHROMA_DIR: str = os.getenv("CHROMA_DIR", "./chroma_store")
 STRICT_PREFLIGHT: bool = os.getenv("STRICT_PREFLIGHT", "true").lower() == "true"
 
+GOLD_TRAIN_FILE: str = os.getenv("GOLD_TRAIN_FILE", "gold_eval.json")
 GOLD_TEST_FILE: str = os.getenv("GOLD_TEST_FILE", "gold_eval.json")

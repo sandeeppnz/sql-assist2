@@ -115,6 +115,8 @@ def eval_gold() -> None:
     # Secondary: relaxed accuracy (row-count based), excluding gold errors
     relaxed_base = [x for x in non_gold if x.get("model_exec_ok")]
     relaxed_ok = [x for x in relaxed_base if x.get("model_correct")]
+    relaxed_fail = [x for x in relaxed_base if not x.get("model_correct")]
+
     relaxed_acc = (len(relaxed_ok) / len(relaxed_base)) if relaxed_base else 0.0
 
     # Gold queries that ran but returned zero rows
@@ -143,7 +145,7 @@ def eval_gold() -> None:
         print("  (no cases where model_exec_ok and gold was valid)")
     print()
 
-    # --- Gold SQL issues (for manual cleanup of the benchmark) ---
+    # --- Gold SQL issues ---
     print("=== Gold SQL errors (excluded from accuracy) ===")
     if not gold_error_cases:
         print("  None ✅")
@@ -154,7 +156,7 @@ def eval_gold() -> None:
             print(f"    gold_error: {err_first_line}")
     print()
 
-    # --- Gold zero-row results (for potential question / gold SQL review) ---
+    # --- Gold zero-row cases ---
     print("=== Gold zero-row results (gold_row_count == 0, no gold_error) ===")
     if not gold_zero_rows:
         print("  None")
@@ -168,25 +170,39 @@ def eval_gold() -> None:
             )
     print()
 
-    # --- Strict failures: where model didn't match gold (no gold error) ---
-    print("=== Strict failures (no gold error, result_match = False) ===")
-    if not strict_fail:
-        print("  None 🎉")
+    # === Strict failures split by relaxed OK / FAIL ===
+    strict_relaxed_ok = [x for x in strict_fail if x.get("model_correct")]
+    strict_relaxed_fail = [x for x in strict_fail if not x.get("model_correct")]
+
+    print("=== Strict failures — RELAXED_OK (row-count matched) ===")
+    if not strict_relaxed_ok:
+        print("  None")
     else:
-        for item in strict_fail:
-            relax_label = "RELAXED_OK" if item.get("model_correct") else "RELAXED_FAIL"
-            print(f"- id={item['id']} [{relax_label}] {item['question']}")
+        for item in strict_relaxed_ok:
+            print(f"- id={item['id']} [RELAXED_OK] {item['question']}")
+            print(
+                f"    rows: gold={item.get('gold_row_count')} "
+                f"model={item.get('model_row_count')}"
+            )
+    print()
+
+    print("=== Strict failures — RELAXED_FAIL (row-count different) ===")
+    if not strict_relaxed_fail:
+        print("  None 🎯 (these are the important ones!)")
+    else:
+        for item in strict_relaxed_fail:
+            print(f"- id={item['id']} [RELAXED_FAIL] {item['question']}")
             print(
                 f"    rows: gold={item.get('gold_row_count')} "
                 f"model={item.get('model_row_count')} "
                 f"model_exec_ok={item.get('model_exec_ok')}"
             )
-            # short indicator if SQL text matches exactly (nice sanity check)
             if item.get("sql_exact_match"):
                 print("    sql_exact_match: True")
             else:
                 print("    sql_exact_match: False")
     print()
+
 
 
 if __name__ == "__main__":
