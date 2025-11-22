@@ -5,6 +5,8 @@ from config import GOLD_TEST_FILE
 from sql_service import generate_full_pipeline
 from db import run_query
 
+from calibration import calibrated_confidence
+
 
 def _normalize_sql(sql: Optional[str]) -> str:
     """Simple SQL normalizer: strip, remove trailing ';', squeeze whitespace."""
@@ -96,6 +98,27 @@ def eval_gold() -> None:
             item["model_correct"] = (item["gold_row_count"] == item["model_row_count"])
         else:
             item["model_correct"] = False
+
+        # --- 7) Calibrated confidence scoring (new) ---
+        try:
+            from calibration import calibrated_confidence
+
+            score = calibrated_confidence(
+                model_sql=item["model_sql"],
+                diagnostics=item["diagnostics"] or {},
+                exec_ok=item["model_exec_ok"],
+                row_count=item["model_row_count"],
+                sql_variants=[],          # you can enable variants later
+                embedding_sim=None        # optional, for future embedding calibration
+            )
+
+            item["confidence"] = score["confidence"]
+            item["confidence_components"] = score["components"]
+
+        except Exception as ex:
+            item["confidence"] = None
+            item["confidence_components"] = {"error": str(ex)}
+
 
     # --- 7) Save per-question results ---
     with open("adventureworks_eval_results.json", "w", encoding="utf-8") as f:
