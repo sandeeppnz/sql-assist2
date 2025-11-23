@@ -65,6 +65,7 @@ def eval_gold() -> None:
             item["diagnostics"] = result.get("diagnostics")
             item["attempts"] = result.get("attempts")
             item["repaired"] = result.get("repaired")
+            item["history"] = result.get("history") or []
 
         except Exception as ex:
             item["model_error"] = f"generation/validation error: {ex}"
