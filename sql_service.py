@@ -458,45 +458,88 @@ def generate_raw(question: str) -> Dict[str, Any]:
     sql = generate_sql(question)
     return {"sql": sql}
 
+import requests
+
 def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
     """
-    Generate N raw SQL variants from the model without validation or repair.
-
-    This function intentionally bypasses:
-    - schema inspector
-    - Chroma retrieval
-    - Vanna's validation
-    - automatic repair
-
-    Because for self-agreement confidence, we want *true raw model variability*.
+    Generate *pure* raw SQL variants directly from Ollama,
+    bypassing Vanna, Chroma, and all retrieval/validation layers.
     """
 
-    from vn_local import LocalVanna  # your existing Ollama+Chroma Vanna instance
-
-    v = LocalVanna()
     variants = []
 
-    prompt = (
-        "Generate only a SQL query. "
-        "Do NOT add explanation or Markdown. "
-        "Question: " + question
-    )
+    prompt = f"""
+You are a SQL generator. 
+Given the question below, output ONLY a SQL SELECT query.
+No comments. No markdown. No explanation.
+
+Question: {question}
+"""
 
     for _ in range(n):
         try:
-            resp = v.ask(
-                prompt,
-                temperature=temperature,
-                top_p=0.95,
-                max_tokens=512
+            resp = requests.post(
+                "http://localhost:11434/api/generate",
+                json={
+                    "model": "qwen2.5:7b-instruct",
+                    "prompt": prompt,
+                    "temperature": temperature,
+                    "top_p": 0.95,
+                },
+                timeout=60
             )
-            # v.ask() returns text; ensure it's stripped
-            sql_candidate = resp.strip()
-            variants.append(sql_candidate)
+            text = resp.json().get("response", "").strip()
+            variants.append(text)
         except Exception:
             variants.append("")
 
+    print("-----")
+    print(variants)
+    print("-----")
     return variants
+
+
+# def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
+#     """
+#     Generate N raw SQL variants from the model without validation or repair.
+#
+#     This function intentionally bypasses:
+#     - schema inspector
+#     - Chroma retrieval
+#     - Vanna's validation
+#     - automatic repair
+#
+#     Because for self-agreement confidence, we want *true raw model variability*.
+#     """
+#
+#     from vn_local import LocalVanna  # your existing Ollama+Chroma Vanna instance
+#
+#     v = LocalVanna()
+#     variants = []
+#
+#     prompt = (
+#         "Generate only a SQL query. "
+#         "Do NOT add explanation or Markdown. "
+#         "Question: " + question
+#     )
+#
+#     for _ in range(n):
+#         try:
+#             resp = v.ask(
+#                 prompt,
+#                 temperature=temperature,
+#                 top_p=0.95,
+#                 max_tokens=512
+#             )
+#             # v.ask() returns text; ensure it's stripped
+#             sql_candidate = resp.strip()
+#             variants.append(sql_candidate)
+#         except Exception:
+#             variants.append("")
+#
+#     print(variants)
+#
+#     return variants
 
 
 def validate_only(sql: str) -> Dict[str, Any]:

@@ -2,7 +2,13 @@ from fastapi import FastAPI, Query
 from pydantic import BaseModel
 
 from calibration import calibrated_confidence
-from config import ENABLE_ESS, ENABLE_SELF_AGREEMENT, ESS_TOP_K
+from config import (
+    ENABLE_ESS,
+    ENABLE_SELF_AGREEMENT,
+    ESS_TOP_K,
+    SELF_AGREEMENT_VARIANTS
+)
+
 from sql_service import (
     embedding_similarity,
     generate_full_pipeline,
@@ -30,29 +36,45 @@ def health():
 @app.post("/sql/generate")
 def generate_endpoint(
     req: QuestionRequest,
-    debug: bool = Query(False, description="Include history of repair attempts")
+    debug: bool = Query(False, description="Include repair attempt history")
 ):
-    """Full pipeline: generate + validate + auto-repair."""
+    """
+    Full SQL generation pipeline:
+    - generate
+    - validate
+    - repair (if needed)
+    - confidence scoring
+    """
 
     result = generate_full_pipeline(req.question)
 
     sql = result.get("sql") or ""
     diagnostics = result.get("diagnostics") or {}
     exec_ok = result.get("exec_error") is None
+    is_repaired = bool(result.get("repaired"))
 
-    # Self-agreement
-    if ENABLE_SELF_AGREEMENT:
-        sql_variants = generate_sql_variants(req.question)
+    # -------------------------------------------------------------
+    # 1) SELF-AGREEMENT (disabled when SQL is repaired)
+    # -------------------------------------------------------------
+    if ENABLE_SELF_AGREEMENT and not is_repaired:
+        sql_variants = generate_sql_variants(
+            req.question,
+            n=SELF_AGREEMENT_VARIANTS
+        )
     else:
         sql_variants = []
 
-    # ESS
+    # -------------------------------------------------------------
+    # 2) ESS (Embedding Similarity)
+    # -------------------------------------------------------------
     if ENABLE_ESS:
         ess_value = embedding_similarity(sql, top_k=ESS_TOP_K)
     else:
         ess_value = None
 
-    # --- SAME CONFIDENCE MODE AS EVAL ---
+    # -------------------------------------------------------------
+    # 3) CONFIDENCE (same logic as eval)
+    # -------------------------------------------------------------
     score = calibrated_confidence(
         model_sql=sql,
         diagnostics=diagnostics,
@@ -62,13 +84,17 @@ def generate_endpoint(
         embedding_sim=ess_value,
         enable_self_agreement=ENABLE_SELF_AGREEMENT,
         enable_ess=ENABLE_ESS,
-        mode="no_exec" 
+        mode="no_exec",       # match eval rules
+        repaired=is_repaired  # NEW: pass repaired flag
     )
 
+    # -------------------------------------------------------------
+    # 4) BUILD RESPONSE
+    # -------------------------------------------------------------
     response = {
         "sql": sql,
         "validated": result.get("validated"),
-        "repaired": result.get("repaired"),
+        "repaired": is_repaired,
         "attempts": result.get("attempts"),
         "diagnostics": diagnostics,
         "exec_error": result.get("exec_error"),

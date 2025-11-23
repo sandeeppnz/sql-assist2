@@ -2,6 +2,7 @@ import re
 from typing import Dict, Any, List, Optional
 from difflib import SequenceMatcher
 
+
 # ============================================================
 # 1. Schema Validity Score (SVS)
 # ============================================================
@@ -64,7 +65,7 @@ def self_agreement_score(main_sql: str, variants: List[str]) -> float:
 # ============================================================
 def execution_behavior_score(exec_ok: bool, row_count: Optional[int]) -> float:
     """
-    Only used in mode="eval"
+    Only used in mode='eval'
     """
     if not exec_ok:
         return 0.0
@@ -102,34 +103,53 @@ def calibrated_confidence(
     embedding_sim: Optional[float] = None,
     enable_self_agreement: bool = True,
     enable_ess: bool = True,
-    mode: str = "no_exec",  # NEW
+    mode: str = "no_exec",      # API = no_exec, eval = eval
+    repaired: bool = False      # <<< NEW flag
 ) -> Dict[str, Any]:
 
+    # -----------------------
+    # Core components
+    # -----------------------
     svs = schema_validity_score(diagnostics)
     shs = structural_heuristic_score(model_sql)
 
-    sas = (
-        self_agreement_score(model_sql, sql_variants)
-        if (enable_self_agreement and sql_variants)
-        else 0.0
-    )
+    # -----------------------
+    # SAS: IGNORE IF REPAIRED
+    # -----------------------
+    if repaired:
+        sas = None
+        sas_weighted = 0.0
+    else:
+        if enable_self_agreement and sql_variants:
+            sas = self_agreement_score(model_sql, sql_variants)
+        else:
+            sas = 0.0
+        sas_weighted = sas
 
-    # EXECUTION SCORE ONLY IN EVAL MODE
+    # -----------------------
+    # EXECUTION SCORE by mode
+    # -----------------------
     if mode == "eval":
         xbs = execution_behavior_score(exec_ok, row_count)
     else:
-        xbs = 0.2  # lightweight signal for validated SQL only
+        xbs = 0.2            # lightweight signal for API mode only
 
+    # -----------------------
+    # ESS Score
+    # -----------------------
     ess = (
         embedding_similarity_score(embedding_sim)
         if (enable_ess and embedding_sim is not None)
         else 0.0
     )
 
+    # -----------------------
+    # Final Weighted Confidence
+    # -----------------------
     confidence = (
         0.25 * svs +
         0.20 * shs +
-        0.25 * sas +
+        0.25 * sas_weighted +  # SAS removed if repaired=True
         0.20 * xbs +
         0.10 * ess
     )
@@ -139,7 +159,7 @@ def calibrated_confidence(
         "components": {
             "schema_validity": svs,
             "structure": shs,
-            "self_agreement": sas,
+            "self_agreement": sas,  # shows None when ignored
             "execution": xbs,
             "embedding_similarity": ess
         }

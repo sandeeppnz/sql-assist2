@@ -134,8 +134,8 @@ def eval_gold() -> None:
         # 7) Calibrated Confidence Scoring
         # =======================================================
 
-        # ---- Self-Agreement Variants ----
-        if ENABLE_SELF_AGREEMENT:
+        # ---- Self-Agreement Variants (disable if repaired SQL) ----
+        if ENABLE_SELF_AGREEMENT and not item["repaired"]:
             try:
                 sql_variants = generate_sql_variants(
                     q, n=SELF_AGREEMENT_VARIANTS
@@ -167,7 +167,8 @@ def eval_gold() -> None:
                 embedding_sim=ess_value,
                 enable_self_agreement=ENABLE_SELF_AGREEMENT,
                 enable_ess=ENABLE_ESS,
-                mode="no_exec"
+                mode="no_exec",
+                repaired=item["repaired"],
             )
 
             item["confidence"] = score["confidence"]
