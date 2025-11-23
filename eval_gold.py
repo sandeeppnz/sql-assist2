@@ -167,6 +167,7 @@ def eval_gold() -> None:
                 embedding_sim=ess_value,
                 enable_self_agreement=ENABLE_SELF_AGREEMENT,
                 enable_ess=ENABLE_ESS,
+                mode="no_exec"
             )
 
             item["confidence"] = score["confidence"]

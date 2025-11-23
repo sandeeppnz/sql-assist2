@@ -2,21 +2,18 @@ import re
 from typing import Dict, Any, List, Optional
 from difflib import SequenceMatcher
 
-
 # ============================================================
 # 1. Schema Validity Score (SVS)
 # ============================================================
 def schema_validity_score(diagnostics: Dict[str, Any]) -> float:
-    """
-    Returns 1.0 if SQL uses valid tables/columns and is 'safe',
-    otherwise 0.0.
-    """
     if not diagnostics:
         return 0.0
 
-    if (diagnostics.get("is_safe") and
+    if (
+        diagnostics.get("is_safe") and
         not diagnostics.get("unknown_tables") and
-        not diagnostics.get("unknown_columns")):
+        not diagnostics.get("unknown_columns")
+    ):
         return 1.0
 
     return 0.0
@@ -26,11 +23,6 @@ def schema_validity_score(diagnostics: Dict[str, Any]) -> float:
 # 2. Structural Heuristic Score (SHS)
 # ============================================================
 def structural_heuristic_score(sql: str) -> float:
-    """
-    Heuristic scoring of SQL structure.
-    Checks for SELECT, FROM, JOIN, GROUP BY, ORDER BY.
-    Output: value between 0 and 1.
-    """
     if not sql:
         return 0.0
 
@@ -56,11 +48,6 @@ def structural_heuristic_score(sql: str) -> float:
 # 3. Self-Agreement Score (SAS)
 # ============================================================
 def self_agreement_score(main_sql: str, variants: List[str]) -> float:
-    """
-    Measure how similar the final SQL is to N variant samples.
-    Uses difflib string similarity.
-    Output: 0 to 1.
-    """
     if not variants:
         return 0.0
 
@@ -75,25 +62,19 @@ def self_agreement_score(main_sql: str, variants: List[str]) -> float:
 # ============================================================
 # 4. Execution Behavior Score (XBS)
 # ============================================================
-def execution_behavior_score(
-    exec_ok: bool,
-    row_count: Optional[int]
-) -> float:
+def execution_behavior_score(exec_ok: bool, row_count: Optional[int]) -> float:
     """
-    Returns a score based on how cleanly the SQL executed.
+    Only used in mode="eval"
     """
     if not exec_ok:
         return 0.0
 
-    # Completely empty or None → low reliability
     if row_count is None:
         return 0.2
 
-    # "Sane" range check
     if 0 <= row_count <= 5_000_000:
         return 1.0
 
-    # too many rows → suspicious
     if row_count > 5_000_000:
         return 0.4
 
@@ -104,10 +85,6 @@ def execution_behavior_score(
 # 5. Embedding Similarity Score (ESS)
 # ============================================================
 def embedding_similarity_score(similarity: Optional[float]) -> float:
-    """
-    Uses ChromaDB (or other) cosine similarity to reference examples.
-    Pass through normalized 0–1.
-    """
     if similarity is None:
         return 0.0
     return max(0.0, min(1.0, similarity))
@@ -123,32 +100,32 @@ def calibrated_confidence(
     row_count: Optional[int],
     sql_variants: Optional[List[str]] = None,
     embedding_sim: Optional[float] = None,
-    enable_self_agreement: bool = True, 
-    enable_ess: bool = True          
+    enable_self_agreement: bool = True,
+    enable_ess: bool = True,
+    mode: str = "no_exec",  # NEW
 ) -> Dict[str, Any]:
-    """
-    Orchestrates all the scoring components and returns:
-    {
-        "confidence": float,
-        "components": {...}
-    }
-    """
 
     svs = schema_validity_score(diagnostics)
     shs = structural_heuristic_score(model_sql)
-    
-    if enable_self_agreement and sql_variants:
-        sas = self_agreement_score(model_sql, sql_variants)
-    else:
-        sas = 0.0
 
-    xbs = execution_behavior_score(exec_ok, row_count)
-    
-    if enable_ess and embedding_sim is not None:
-        ess = embedding_similarity_score(embedding_sim)
+    sas = (
+        self_agreement_score(model_sql, sql_variants)
+        if (enable_self_agreement and sql_variants)
+        else 0.0
+    )
+
+    # EXECUTION SCORE ONLY IN EVAL MODE
+    if mode == "eval":
+        xbs = execution_behavior_score(exec_ok, row_count)
     else:
-        ess = 0.0
-    # Weighted combination (tunable)
+        xbs = 0.2  # lightweight signal for validated SQL only
+
+    ess = (
+        embedding_similarity_score(embedding_sim)
+        if (enable_ess and embedding_sim is not None)
+        else 0.0
+    )
+
     confidence = (
         0.25 * svs +
         0.20 * shs +
