@@ -143,6 +143,7 @@ def calibrated_confidence(
         sas = 0.0
 
     xbs = execution_behavior_score(exec_ok, row_count)
+    
     if enable_ess and embedding_sim is not None:
         ess = embedding_similarity_score(embedding_sim)
     else:
