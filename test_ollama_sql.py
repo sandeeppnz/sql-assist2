@@ -1,4 +1,5 @@
 import requests
+import json
 
 prompt = """
 Generate a SQL SELECT query.
@@ -12,11 +13,30 @@ resp = requests.post(
         "prompt": prompt,
         "temperature": 0.7,
         "top_p": 0.95,
+        "stream": True,  # Ollama streams by default
     },
+    stream=True  # Enable streaming in requests
 )
 
-print("RAW RESPONSE:")
-print(resp.text)
+print("RAW RESPONSE (first few chunks):")
+# Ollama returns streaming JSON: one JSON object per line
+full_response = ""
+chunk_count = 0
+for line in resp.iter_lines():
+    if line:
+        chunk_count += 1
+        if chunk_count <= 3:  # Show first 3 chunks
+            print(line.decode('utf-8'))
+        try:
+            chunk = json.loads(line.decode('utf-8'))
+            if "response" in chunk:
+                full_response += chunk["response"]
+            if chunk.get("done", False):
+                break
+        except json.JSONDecodeError:
+            continue
+
+print(f"\n... (total chunks: {chunk_count})")
 print()
-print("PARSED:")
-print(resp.json().get("response"))
+print("PARSED (full response):")
+print(full_response.strip())

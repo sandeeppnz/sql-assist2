@@ -460,43 +460,48 @@ def generate_raw(question: str) -> Dict[str, Any]:
 
 import requests
 
-def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
-    """
-    Generate *pure* raw SQL variants directly from Ollama,
-    bypassing Vanna, Chroma, and all retrieval/validation layers.
-    """
+def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7):
+    import requests
+    from config import OLLAMA_MODEL, OLLAMA_HOST
 
     variants = []
 
     prompt = f"""
-You are a SQL generator. 
-Given the question below, output ONLY a SQL SELECT query.
-No comments. No markdown. No explanation.
+You are a SQL generator.
+Return ONLY a SQL SELECT statement inside <sql></sql>.
+Do NOT include explanations, Markdown, comments, or text.
 
-Question: {question}
-"""
+<task>
+{question}
+</task>
+
+Respond like:
+<sql>SELECT ...</sql>
+""".strip()
 
     for _ in range(n):
-        try:
-            resp = requests.post(
-                "http://localhost:11434/api/generate",
-                json={
-                    "model": "qwen2.5:7b-instruct",
-                    "prompt": prompt,
-                    "temperature": temperature,
-                    "top_p": 0.95,
-                },
-                timeout=60
-            )
-            text = resp.json().get("response", "").strip()
-            variants.append(text)
-        except Exception:
-            variants.append("")
+        r = requests.post(
+            f"{OLLAMA_HOST}/api/generate",
+            json={
+                "model": OLLAMA_MODEL,
+                "prompt": prompt,
+                "temperature": temperature,
+                "top_p": 0.9,
+                "stream": False,
+            },
+        )
 
-    print("-----")
-    print(variants)
-    print("-----")
+        raw = r.json().get("response", "")
+
+        # Extract SQL
+        sql = ""
+        if "<sql>" in raw and "</sql>" in raw:
+            sql = raw.split("<sql>", 1)[1].split("</sql>", 1)[0].strip()
+
+        variants.append(sql)
+
     return variants
+
 
 
 # def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
