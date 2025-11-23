@@ -3,6 +3,8 @@ import re
 from db import run_query
 
 from sql_generator import generate_sql
+from sql_normalizer import canonicalize_sql
+from sql_similarity import structural_similarity
 from vanna_provider import generate_sql_from_prompt
 from sql_validator import (
     is_safe_select,
@@ -598,32 +600,60 @@ def _build_unknown_table_hints(unknown_tables: List[str]) -> str:
 
 def embedding_similarity(model_sql: str, top_k: int = 3) -> float:
     """
-    Compute embedding similarity score using ChromaDB (through Vanna).
-    Returns a float between 0 and 1.
+    Uses hybrid similarity:
+    1) Canonical SQL embedding (Chroma)
+    2) SQL structural similarity (AST-level)
+    Final ESS = weighted mix
     """
+
     from vn_local import LocalVanna
 
-    if not model_sql.strip():
+    if not model_sql:
         return 0.0
 
-    try:
-        v = LocalVanna()
+    v = LocalVanna()
 
-        # Embed the model SQL
-        sql_embedding = v.embed(model_sql)
+    # 1) Canonical normalize
+    canonical = canonicalize_sql(model_sql)
+    embedding = v.embed(canonical)
 
-        # Query nearest SQL examples
-        results = v.vectorstore.similarity_search_by_vector(sql_embedding, k=top_k)
+    # Query ChromaDB collection with embeddings
+    query_result = v.sql_collection.query(
+        query_embeddings=[embedding],
+        n_results=top_k,
+        include=["documents", "distances"]
+    )
 
-        if not results:
-            return 0.0
+    if not query_result or not query_result.get("documents") or not query_result["documents"][0]:
+        emb_sim = 0.0
+        struct_sim = 0.0
+    else:
+        # Extract documents and distances
+        documents = query_result["documents"][0]  # First query result
+        distances = query_result.get("distances", [[]])[0] if query_result.get("distances") else []
+        
+        # Convert distances to similarity scores (lower distance = higher similarity)
+        # Normalize: score = 1 / (1 + distance) or use 1 - normalized_distance
+        if distances:
+            # Convert distances to scores (assuming cosine distance, range 0-2)
+            # For cosine similarity: similarity = 1 - distance
+            scores = [max(0.0, 1.0 - d) for d in distances]
+            emb_sim = sum(scores) / len(scores)
+        else:
+            emb_sim = 0.0
 
-        # Average the similarity scores
-        scores = [r.score for r in results if hasattr(r, "score")]
-        if not scores:
-            return 0.0
+        # 2) Structural similarity
+        struct_sims = []
+        for gold_sql in documents:
+            struct_sims.append(structural_similarity(model_sql, gold_sql))
+        
+        if struct_sims:
+            struct_sim = sum(struct_sims) / len(struct_sims)
+        else:
+            struct_sim = 0.0
 
-        ess = sum(scores) / len(scores)
-        return max(0.0, min(1.0, ess))  # Normalize to [0,1]
-    except Exception:
-        return 0.0
+    # HYBRID ESS
+    ess = 0.7 * emb_sim + 0.3 * struct_sim
+
+    # Clamp
+    return max(0.0, min(1.0, ess))

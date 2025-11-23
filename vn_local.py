@@ -12,3 +12,6 @@ class LocalVanna(ChromaDB_VectorStore, Ollama):
         }
         ChromaDB_VectorStore.__init__(self, config=config)
         Ollama.__init__(self, config=config)
+
+    def embed(self, text: str):
+        return self.generate_embedding(text)
