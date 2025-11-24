@@ -1,39 +1,80 @@
 import json
+import glob
+import os
+
 from config import GOLD_TRAIN_FILE
 from vanna_provider import get_vn
 from schema_service import schema_service
 from sql_normalizer import canonicalize_sql
 
 
+TRAIN_DIR = "data/train"
+
+
+def load_training_files():
+    """Returns a list of all JSON training files inside data/train/."""
+    pattern = os.path.join(TRAIN_DIR, "*.json")
+    return glob.glob(pattern)
+
+
+def load_items_from_file(path: str):
+    """Reads and returns JSON array from file."""
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def train_item(vn, item, i, file_name):
+    """Trains Vanna on a single Q/A item."""
+    q = item["question"]
+    sql = item["gold_sql"]
+
+    # --- ORIGINAL SQL ---
+    vn.train(question=q, sql=sql)
+
+    # --- CANONICAL NORMALIZED SQL ---
+    canonical = canonicalize_sql(sql)
+    if canonical and canonical != sql:
+        vn.train(question=q, sql=canonical)
+
+    # --- LOWERCASE CANONICAL VERSION ---
+    vn.train(question=q, sql=canonical.lower())
+
+    print(f"  Trained {i}: {q[:60]}...  ({file_name})")
+
+
 def main():
     vn = get_vn()
 
-    print("Training on schema text...")
+    print("\nTraining on schema text...")
     vn.train(documentation=schema_service.schema_text)
 
-    print("Training on gold Q/A examples...")
-    with open(GOLD_TRAIN_FILE, "r", encoding="utf-8") as f:
-        gold_items = json.load(f)
+    # ------------------------------------------------------------
+    # Load all training JSONs from data/train/
+    # ------------------------------------------------------------
+    files = load_training_files()
 
-    for i, item in enumerate(gold_items, start=1):
-        q = item["question"]
-        sql = item["gold_sql"]
+    if not files:
+        print("No training files found in data/train/*.json")
+        return
 
-        # --- ORIGINAL SQL ---
-        vn.train(question=q, sql=sql)
+    print(f"\nFound {len(files)} training files:")
+    for f in files:
+        print(" -", f)
 
-        # --- CANONICAL VERSION ---
-        canonical = canonicalize_sql(sql)
-        if canonical and canonical != sql:
-            vn.train(question=q, sql=canonical)
+    print("\nTraining on gold Q/A examples...")
 
-        # --- LOWERCASE CANONICAL VERSION (helps embeddings a lot) ---
-        lower = canonical.lower()
-        vn.train(question=q, sql=lower)
 
-        print(f" Trained {i}: {q[:60]}...")
+    for file_path in files:
+        file_name = os.path.basename(file_path)
 
-    print("Training complete.")
+        print(f"\nProcessing file: {file_name}")
+
+        gold_items = load_items_from_file(file_path)
+
+        for i, item in enumerate(gold_items, start=1):
+            train_item(vn, item, i, file_name)
+
+    print("\nTraining complete.")
 
 
 if __name__ == "__main__":
