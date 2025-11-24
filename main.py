@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 
+from calibration_fast_variants import fast_self_agreement_variants
 from confidence_service import get_confidence_service
 
 from calibration import calibrated_confidence
@@ -58,11 +59,17 @@ def generate_endpoint(
     # -------------------------------------------------------------
     # 1) SELF-AGREEMENT (disabled when SQL is repaired)
     # -------------------------------------------------------------
+    # if ENABLE_SELF_AGREEMENT and not is_repaired:
+    #     sql_variants = generate_sql_variants(
+    #         req.question,
+    #         n=SELF_AGREEMENT_VARIANTS
+    #     )
+    # else:
+    #     sql_variants = []
+
     if ENABLE_SELF_AGREEMENT and not is_repaired:
-        sql_variants = generate_sql_variants(
-            req.question,
-            n=SELF_AGREEMENT_VARIANTS
-        )
+        # FAST MODE: NO LLM CALLS
+        sql_variants = fast_self_agreement_variants(sql)
     else:
         sql_variants = []
 
