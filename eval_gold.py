@@ -17,6 +17,7 @@ from sql_service import (
 
 from db import run_query
 from calibration import calibrated_confidence
+from confidence_service import get_confidence_service
 
 
 def _normalize_sql(sql: Optional[str]) -> str:
@@ -30,6 +31,9 @@ def _normalize_sql(sql: Optional[str]) -> str:
 def eval_gold() -> None:
     with open(GOLD_TEST_FILE, "r", encoding="utf-8") as f:
         data: List[Dict[str, Any]] = json.load(f)
+
+    # ML calibrator singleton
+    calibrator = get_confidence_service()
 
     for item in data:
         q = item["question"]
@@ -51,11 +55,13 @@ def eval_gold() -> None:
         item["model_correct"] = False
 
         # Confidence fields
+        item["confidence_raw"] = None
         item["confidence"] = None
+        item["confidence_used_calibrator"] = None
         item["confidence_components"] = None
 
         # =======================================================
-        # 1) Generate SQL via main validated pipeline
+        # 1) Generate SQL
         # =======================================================
         try:
             result = generate_full_pipeline(q)
@@ -69,7 +75,7 @@ def eval_gold() -> None:
 
         except Exception as ex:
             item["model_error"] = f"generation/validation error: {ex}"
-            continue  # Can't proceed without SQL
+            continue  # Cannot continue without SQL
 
         # =======================================================
         # 2) Execute Gold SQL
@@ -80,7 +86,6 @@ def eval_gold() -> None:
             item["gold_row_count"] = len(gold_result)
             item["gold_error"] = None
         except Exception as ex:
-            # Gold query error → excluded from accuracy
             item["gold_error"] = str(ex)
 
         # =======================================================
@@ -97,7 +102,7 @@ def eval_gold() -> None:
             item["model_error"] = f"execution error: {ex}"
 
         # =======================================================
-        # 4) Strict comparison (exact result match)
+        # 4) Strict comparison
         # =======================================================
         if (
             item["gold_error"] is None
@@ -107,7 +112,7 @@ def eval_gold() -> None:
             item["result_match"] = (gold_result == model_result)
 
         # =======================================================
-        # 5) Exact SQL match (normalized text)
+        # 5) Exact SQL match (normalized)
         # =======================================================
         norm_gold = _normalize_sql(gold_sql)
         norm_model = _normalize_sql(item["model_sql"])
@@ -116,7 +121,7 @@ def eval_gold() -> None:
             item["sql_exact_match"] = True
 
         # =======================================================
-        # 6) Relaxed correctness (row count match)
+        # 6) Relaxed correctness: row-count match
         # =======================================================
         if (
             item["gold_error"] is None
@@ -131,10 +136,10 @@ def eval_gold() -> None:
             item["model_correct"] = False
 
         # =======================================================
-        # 7) Calibrated Confidence Scoring
+        # 7) Confidence Scoring (Raw + ML Calibrated)
         # =======================================================
 
-        # ---- Self-Agreement Variants (disable if repaired SQL) ----
+        # ---- Self-Agreement (skip if repaired) ----
         if ENABLE_SELF_AGREEMENT and not item["repaired"]:
             try:
                 sql_variants = generate_sql_variants(
@@ -145,7 +150,7 @@ def eval_gold() -> None:
         else:
             sql_variants = []
 
-        # ---- Embedding Similarity (ESS) ----
+        # ---- Embedding Similarity ----
         if ENABLE_ESS:
             try:
                 ess_value = embedding_similarity(
@@ -156,9 +161,9 @@ def eval_gold() -> None:
         else:
             ess_value = None
 
-        # ---- Compute Confidence ----
+        # ---- RAW heuristic confidence (from calibration.py) ----
         try:
-            score = calibrated_confidence(
+            raw_score = calibrated_confidence(
                 model_sql=item["model_sql"],
                 diagnostics=item["diagnostics"] or {},
                 exec_ok=item["model_exec_ok"],
@@ -171,11 +176,24 @@ def eval_gold() -> None:
                 repaired=item["repaired"],
             )
 
-            item["confidence"] = score["confidence"]
-            item["confidence_components"] = score["components"]
+            raw_conf = raw_score["confidence"]
+            components = raw_score["components"]
+
+            # ---- ML calibrated confidence ----
+            conf_result = calibrator.compute_confidence(
+                raw_confidence=raw_conf,
+                components=components
+            )
+
+            item["confidence_raw"] = conf_result.raw
+            item["confidence"] = conf_result.calibrated
+            item["confidence_used_calibrator"] = conf_result.used_calibrator
+            item["confidence_components"] = conf_result.components
 
         except Exception as ex:
+            item["confidence_raw"] = None
             item["confidence"] = None
+            item["confidence_used_calibrator"] = False
             item["confidence_components"] = {"error": str(ex)}
 
     # =======================================================
@@ -186,7 +204,7 @@ def eval_gold() -> None:
 
     # =======================================================
     # 9) Reporting Section
-    # (identical to your original code)
+    # (unchanged from your original)
     # =======================================================
 
     total = len(data)
@@ -205,8 +223,7 @@ def eval_gold() -> None:
     relaxed_acc = (len(relaxed_ok) / len(relaxed_base)) if relaxed_base else 0.0
 
     gold_zero_rows = [
-        x
-        for x in data
+        x for x in data
         if x.get("gold_error") is None
         and x.get("gold_row_count") is not None
         and x.get("gold_row_count") == 0

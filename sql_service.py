@@ -15,6 +15,8 @@ from sql_validator import (
 )
 from schema_service import schema_service
 
+
+
 MAX_REPAIR_ATTEMPTS = 3
 
 DIVIDE_BY_ZERO_PAT = re.compile(
@@ -503,50 +505,6 @@ Respond like:
         variants.append(sql)
 
     return variants
-
-
-
-# def generate_sql_variants(question: str, n: int = 3, temperature: float = 0.7) -> List[str]:
-#     """
-#     Generate N raw SQL variants from the model without validation or repair.
-#
-#     This function intentionally bypasses:
-#     - schema inspector
-#     - Chroma retrieval
-#     - Vanna's validation
-#     - automatic repair
-#
-#     Because for self-agreement confidence, we want *true raw model variability*.
-#     """
-#
-#     from vn_local import LocalVanna  # your existing Ollama+Chroma Vanna instance
-#
-#     v = LocalVanna()
-#     variants = []
-#
-#     prompt = (
-#         "Generate only a SQL query. "
-#         "Do NOT add explanation or Markdown. "
-#         "Question: " + question
-#     )
-#
-#     for _ in range(n):
-#         try:
-#             resp = v.ask(
-#                 prompt,
-#                 temperature=temperature,
-#                 top_p=0.95,
-#                 max_tokens=512
-#             )
-#             # v.ask() returns text; ensure it's stripped
-#             sql_candidate = resp.strip()
-#             variants.append(sql_candidate)
-#         except Exception:
-#             variants.append("")
-#
-#     print(variants)
-#
-#     return variants
 
 
 def validate_only(sql: str) -> Dict[str, Any]:

@@ -1,6 +1,8 @@
 from fastapi import FastAPI, Query
 from pydantic import BaseModel
 
+from confidence_service import get_confidence_service
+
 from calibration import calibrated_confidence
 from config import (
     ENABLE_ESS,
@@ -75,7 +77,7 @@ def generate_endpoint(
     # -------------------------------------------------------------
     # 3) CONFIDENCE (same logic as eval)
     # -------------------------------------------------------------
-    score = calibrated_confidence(
+    raw_score = calibrated_confidence(
         model_sql=sql,
         diagnostics=diagnostics,
         exec_ok=exec_ok,
@@ -84,9 +86,19 @@ def generate_endpoint(
         embedding_sim=ess_value,
         enable_self_agreement=ENABLE_SELF_AGREEMENT,
         enable_ess=ENABLE_ESS,
-        mode="no_exec",       # match eval rules
-        repaired=is_repaired  # NEW: pass repaired flag
+        mode="no_exec",
+        repaired=is_repaired
     )
+
+    raw_conf = raw_score["confidence"]
+    components = raw_score["components"]
+
+    cal = get_confidence_service()
+    conf_result = cal.compute_confidence(
+        raw_confidence=raw_conf,
+        components=components
+    )
+
 
     # -------------------------------------------------------------
     # 4) BUILD RESPONSE
@@ -98,8 +110,12 @@ def generate_endpoint(
         "attempts": result.get("attempts"),
         "diagnostics": diagnostics,
         "exec_error": result.get("exec_error"),
-        "confidence": score["confidence"],
-        "confidence_components": score["components"]
+
+        # Confidence scores
+        "confidence_raw": conf_result.raw,
+        "confidence": conf_result.calibrated,
+        "confidence_used_calibrator": conf_result.used_calibrator,
+        "confidence_components": conf_result.components,
     }
 
     if debug:
