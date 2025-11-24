@@ -5,6 +5,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.calibration import CalibratedClassifierCV
 import joblib
+from tqdm import tqdm
 
 INPUT = "adventureworks_eval_results.json"
 MODEL_FILE = "calibrator.pkl"
@@ -79,8 +80,8 @@ def main():
         "feature_keys": FEATURE_KEYS
     }, MODEL_FILE)
 
-    print(f"Saved → {MODEL_FILE}")
-    print(f"Training accuracy: {lr.score(X_scaled, y):.4f}")
+    tqdm.write(f"Saved → {MODEL_FILE}")
+    tqdm.write(f"Training accuracy: {lr.score(X_scaled, y):.4f}")
 
 if __name__ == "__main__":
     main()

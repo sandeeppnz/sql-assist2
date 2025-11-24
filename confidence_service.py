@@ -5,6 +5,8 @@ import numpy as np
 from dataclasses import dataclass
 from typing import Dict, Any, Optional
 
+from tqdm import tqdm
+
 DEFAULT_CALIBRATOR_PATH = "calibrator.pkl"
 
 
@@ -40,7 +42,7 @@ class ConfidenceService:
         self.calibrator = bundle["calibrator"]
         self.feature_keys = bundle["feature_keys"]
 
-        print(f"[ConfidenceService] Loaded calibrator from {self.calibrator_path}")
+        tqdm.write(f"[ConfidenceService] Loaded calibrator from {self.calibrator_path}")
 
     # ---------------------------------------
     # Predict calibrated probability

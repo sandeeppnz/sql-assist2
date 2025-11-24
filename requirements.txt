@@ -6,6 +6,7 @@ pyodbc
 sqlalchemy
 fastapi
 uvicorn
+tqdm
 
 # === Add OpenAI Support ===
 openai>=1.0.0

@@ -2,6 +2,8 @@ import json
 import glob
 import os
 
+from tqdm import tqdm
+
 from vanna_provider import get_vn
 from schema_service import schema_service
 from sql_normalizer import canonicalize_sql
@@ -38,13 +40,13 @@ def train_item(vn, item, i, file_name):
     # --- LOWERCASE CANONICAL VERSION ---
     vn.train(question=q, sql=canonical.lower())
 
-    print(f"  Trained {i}: {q[:60]}...  ({file_name})")
+    tqdm.write(f"  Trained {i}: {q[:60]}...  ({file_name})")
 
 
 def main():
     vn = get_vn()
 
-    print("\nTraining on schema text...")
+    tqdm.write("\nTraining on schema text...")
     vn.train(documentation=schema_service.schema_text)
 
     # ------------------------------------------------------------
@@ -53,27 +55,27 @@ def main():
     files = load_training_files()
 
     if not files:
-        print("No training files found in data/train/*.json")
+        tqdm.write("No training files found in data/train/*.json")
         return
 
-    print(f"\nFound {len(files)} training files:")
+    tqdm.write(f"\nFound {len(files)} training files:")
     for f in files:
-        print(" -", f)
+        tqdm.write(" -", f)
 
-    print("\nTraining on gold Q/A examples...")
+    tqdm.write("\nTraining on gold Q/A examples...")
 
 
     for file_path in files:
         file_name = os.path.basename(file_path)
 
-        print(f"\nProcessing file: {file_name}")
+        tqdm.write(f"\nProcessing file: {file_name}")
 
         gold_items = load_items_from_file(file_path)
 
         for i, item in enumerate(gold_items, start=1):
             train_item(vn, item, i, file_name)
 
-    print("\nTraining complete.")
+    tqdm.write("\nTraining complete.")
 
 
 if __name__ == "__main__":

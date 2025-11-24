@@ -2,6 +2,8 @@
 from typing import Optional
 import os
 
+from tqdm import tqdm
+
 from vn_local import LocalVanna              # Ollama
 from llm_openai_adapter import OpenAIVanna   # OpenAI adapter
 
@@ -26,10 +28,10 @@ def get_vn():
     provider = os.getenv("VN_PROVIDER", "ollama").lower()
 
     if provider == "openai":
-        print("→ Using OpenAI Vanna Adapter")
+        tqdm.write("→ Using OpenAI Vanna Adapter")
         _vn_instance = OpenAIVanna()
     else:
-        print("→ Using Ollama Vanna Adapter (default)")
+        tqdm.write("→ Using Ollama Vanna Adapter (default)")
         _vn_instance = LocalVanna()
 
     return _vn_instance
@@ -59,11 +61,11 @@ def _debug_log(tag: str, raw_sql: str):
     if not DEBUG:
         return
 
-    print("\n" + "=" * 80)
-    print(f"DEBUG: RAW OUTPUT ({tag})")
-    print("-" * 80)
-    print(raw_sql)
-    print("=" * 80 + "\n")
+    tqdm.write("\n" + "=" * 80)
+    tqdm.write(f"DEBUG: RAW OUTPUT ({tag})")
+    tqdm.write("-" * 80)
+    tqdm.write(raw_sql)
+    tqdm.write("=" * 80 + "\n")
 
 
 # ----------------------------------------------------------

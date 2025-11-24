@@ -1,6 +1,7 @@
 # calibrator_predict.py
 import joblib
 import numpy as np
+from tqdm import tqdm
 
 MODEL_FILE = "calibrator.pkl"
 
@@ -27,4 +28,4 @@ if __name__ == "__main__":
         "embedding_similarity": 0.667,
     }
 
-    print("Calibrated:", predict_calibrated_confidence(example))
+    tqdm.write("Calibrated:", predict_calibrated_confidence(example))
