@@ -2,7 +2,6 @@ import json
 import glob
 import os
 
-from config import GOLD_TRAIN_FILE
 from vanna_provider import get_vn
 from schema_service import schema_service
 from sql_normalizer import canonicalize_sql
