@@ -1,32 +1,52 @@
+# vanna_provider.py
 from typing import Optional
-from vn_local import LocalVanna
+import os
 
-_vn_instance: Optional[LocalVanna] = None
+from vn_local import LocalVanna              # Ollama
+from llm_openai_adapter import OpenAIVanna   # OpenAI adapter
 
-# Toggle this to False to disable debug output
+
+# GLOBAL SINGLETON INSTANCE
+_vn_instance: Optional[object] = None
+
+# Toggle this to False to disable debug logs
 DEBUG = True
 
 
-def get_vn() -> LocalVanna:
+def get_vn():
     """
-    Returns a singleton LocalVanna instance so the Ollama model
-    is loaded only once.
+    Returns a singleton Vanna instance.
+    Chooses between Ollama or OpenAI based on VN_PROVIDER env var.
     """
     global _vn_instance
-    if _vn_instance is None:
+
+    if _vn_instance is not None:
+        return _vn_instance
+
+    provider = os.getenv("VN_PROVIDER", "ollama").lower()
+
+    if provider == "openai":
+        print("→ Using OpenAI Vanna Adapter")
+        _vn_instance = OpenAIVanna()
+    else:
+        print("→ Using Ollama Vanna Adapter (default)")
         _vn_instance = LocalVanna()
+
     return _vn_instance
 
+
+# ----------------------------------------------------------
+# NORMALIZATION + DEBUGGING
+# ----------------------------------------------------------
 
 def _normalize_sql_output(sql) -> str:
     """
     Normalize whitespace and ensure we always return a string.
-    Some LLMs return lists, dicts, or multi-line formatted strings.
+    Some LLMs return dict/list or multiline formatted SQL.
     """
     if sql is None:
         return ""
 
-    # Convert non-string outputs (rare but can occur)
     if not isinstance(sql, str):
         sql = str(sql)
 
@@ -35,7 +55,7 @@ def _normalize_sql_output(sql) -> str:
 
 
 def _debug_log(tag: str, raw_sql: str):
-    """Print debug info for SQL model outputs."""
+    """Print debug information for SQL model outputs."""
     if not DEBUG:
         return
 
@@ -46,9 +66,13 @@ def _debug_log(tag: str, raw_sql: str):
     print("=" * 80 + "\n")
 
 
+# ----------------------------------------------------------
+# DIRECT SQL GENERATION (REPAIR MODE)
+# ----------------------------------------------------------
+
 def generate_sql_from_prompt(prompt: str) -> str:
     """
-    SQL repair mode (direct prompt → SQL).
+    SQL repair mode: raw prompt -> SQL using vn.generate_sql().
     """
     vn = get_vn()
     raw = vn.generate_sql(prompt)
