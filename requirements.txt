@@ -7,3 +7,12 @@ sqlalchemy
 fastapi
 uvicorn
 
+# === Add OpenAI Support ===
+openai>=1.0.0
+
+# === Needed for OpenAI embeddings & tokenization ===
+tiktoken
+
+# === (Optional but recommended) For evaluation + diagnostics ===
+scikit-learn
+joblib
