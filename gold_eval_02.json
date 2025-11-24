@@ -305,7 +305,6 @@
       "model_exec_ok": false,
       "result_match": false,
       "gold_error": null,
-      "gold_error": null,
       "model_error": null
     },
     {

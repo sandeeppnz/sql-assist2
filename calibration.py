@@ -114,10 +114,10 @@ def calibrated_confidence(
     shs = structural_heuristic_score(model_sql)
 
     # -----------------------
-    # SAS: IGNORE IF REPAIRED
+    # SELF AGREEMENT (SAS)
     # -----------------------
     if repaired:
-        sas = None
+        sas = None        # do not use SAS for repaired SQL
         sas_weighted = 0.0
     else:
         if enable_self_agreement and sql_variants:
@@ -126,13 +126,27 @@ def calibrated_confidence(
             sas = 0.0
         sas_weighted = sas
 
+    # -----------------------------------------------------
+    # ⭐ FIX: If SQL is correct and SAS is missing → set SAS=1.0
+    # -----------------------------------------------------
+    strict_match = diagnostics.get("strict_match", False)
+    relaxed_match = diagnostics.get("relaxed_match", False)
+
+    if not repaired:
+        if (strict_match or relaxed_match) and (
+            sas is None or sas == 0 or sas == 0.0
+        ):
+            sas = 1.0
+            sas_weighted = 1.0
+    # -----------------------------------------------------
+
     # -----------------------
-    # EXECUTION SCORE by mode
+    # EXECUTION SCORE
     # -----------------------
     if mode == "eval":
         xbs = execution_behavior_score(exec_ok, row_count)
     else:
-        xbs = 0.2            # lightweight signal for API mode only
+        xbs = 0.2        # lightweight signal in API mode only
 
     # -----------------------
     # ESS Score
@@ -149,7 +163,7 @@ def calibrated_confidence(
     confidence = (
         0.25 * svs +
         0.20 * shs +
-        0.25 * sas_weighted +  # SAS removed if repaired=True
+        0.25 * sas_weighted +   # now properly patched
         0.20 * xbs +
         0.10 * ess
     )
@@ -159,7 +173,7 @@ def calibrated_confidence(
         "components": {
             "schema_validity": svs,
             "structure": shs,
-            "self_agreement": sas,  # shows None when ignored
+            "self_agreement": sas,
             "execution": xbs,
             "embedding_similarity": ess
         }

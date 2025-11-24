@@ -50,14 +50,31 @@ class ConfidenceService:
             return None  # calibrator missing
 
         try:
-            X = np.array([[features[k] for k in self.feature_keys]])
-        except KeyError:
-            # Missing a feature → fallback
+            # Extract features, replacing None/NaN with 0.0
+            feature_values = []
+            for k in self.feature_keys:
+                val = features.get(k)
+                if val is None or (isinstance(val, float) and np.isnan(val)):
+                    feature_values.append(0.0)
+                else:
+                    feature_values.append(float(val))
+            
+            X = np.array([feature_values])
+            
+            # Check for any remaining NaN values
+            if np.isnan(X).any():
+                return None  # fallback if NaN still present
+                
+        except (KeyError, ValueError, TypeError) as e:
+            # Missing a feature or conversion error → fallback
             return None
 
-        X_scaled = self.scaler.transform(X)
-        prob = self.calibrator.predict_proba(X_scaled)[0, 1]
-        return float(prob)
+        try:
+            X_scaled = self.scaler.transform(X)
+            prob = self.calibrator.predict_proba(X_scaled)[0, 1]
+            return float(prob)
+        except Exception:
+            return None  # fallback on any prediction error
 
     # ---------------------------------------
     # Main entry: compute confidence
